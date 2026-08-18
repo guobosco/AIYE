@@ -54,7 +54,7 @@ aiye/
 
 ## 🚀 本地开发与环境配置指南
 
-三端统一通过公网 `nginx` 入口访问后端，客户端 API 地址默认使用 `https://123.57.67.153`，不再直接配置 `127.0.0.1`、`localhost` 或 `:8000`。
+本地开发时，移动端默认直连本机启动的后端服务；Android 模拟器使用 `http://10.0.2.2:8000/`，iOS 模拟器使用 `http://127.0.0.1:8000`。
 
 ### 后端环境启动
 ```bash
@@ -64,21 +64,21 @@ source .venv/bin/activate  # Windows 用户使用: .venv\Scripts\activate
 pip install -r requirements.txt
 ./run_dev.sh               # 或者使用 python main.py
 ```
-*后端应用默认监听 `http://0.0.0.0:8000`，并由 `nginx` 对外统一转发到 `https://123.57.67.153`。联调时优先访问 `https://123.57.67.153/healthz` 检查是否启动成功。*
+*后端应用本地开发默认监听 `http://0.0.0.0:8000`。联调时优先访问本机 `http://127.0.0.1:8000/healthz` 检查是否启动成功。*
 
 ### Android 端开发
 1. 使用 **Android Studio** 打开 `android_aiye` 目录。
 2. **配置接口地址**：
    - 打开文件 `android_aiye/gradle.properties`。
-   - 将 `DEV_API_BASE_URL` 修改为 `https://123.57.67.153/`。
+    - 默认已配置为 `http://10.0.2.2:8000/`，这是 Android 模拟器访问宿主机后端的标准地址。
 3. 编译并运行在模拟器或真机上。
 
 ### iOS 端开发
 1. 使用 **Xcode** 打开 iOS 工程（如 `ios_aiye/aiye/aiye/aiye.xcodeproj`）。
 2. **配置接口地址**：
    - 打开配置文件 `ios_aiye/aiye/Config/*.xcconfig` 或修改 `Info.plist` 中的相关配置。
-   - 将 `AIYE_BASE_URL` 修改为 `https://123.57.67.153`。
-   - *当前客户端走 HTTPS 公网入口，通常不需要为 HTTP 联调额外放开 ATS。*
+    - 默认已配置为 `http://127.0.0.1:8000`，适用于 iOS 模拟器直接连接本机后端。
+    - *如果切到 iPhone 真机调试，需要改成你这台 Mac 的局域网 IP，例如 `http://192.168.x.x:8000`。*
 3. 编译并在 iOS 模拟器或 iPhone 真机上运行。
 
 ### 微信小程序开发
@@ -106,4 +106,4 @@ pip install -r requirements.txt
 - **iOS**: `ios_aiye/aiye/Config/*.xcconfig` 中的 `AIYE_BASE_URL`
 - **WeChat**: `wechat_aiye/config/dev.ts` 中的 `TARO_APP_API_BASE_URL`
 
-> 当前推荐联调方式是统一走 `https://123.57.67.153`，避免客户端直接连 `:8000` 导致配置分叉。
+> 当前移动端默认联调方式是直连本地 `:8000` 后端；如果后续需要恢复公网联调，再把对应 BaseURL 改回服务器地址即可。

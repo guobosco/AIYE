@@ -4,8 +4,8 @@ plugins {
     id("com.google.devtools.ksp") version "1.9.20-1.0.14"
 }
 
-// Default to the public nginx entry so all clients use 80/443 instead of the app port directly.
-val localApiBaseUrl = "https://123.57.67.153/"
+// Default to the local backend running on the host machine for Android emulator debugging.
+val localApiBaseUrl = "http://10.0.2.2:8000/"
 val devApiBaseUrl = providers.gradleProperty("DEV_API_BASE_URL").orElse(localApiBaseUrl).get()
 val prodApiBaseUrl = providers.gradleProperty("PROD_API_BASE_URL").orElse(localApiBaseUrl).get()
 

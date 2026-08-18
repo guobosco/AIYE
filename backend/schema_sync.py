@@ -23,7 +23,6 @@ DROP_COLUMNS = {
         "ringtone_uri",
         "role",
         "status",
-        "last_login_at",
         "is_deleted",
     },
 }
@@ -124,8 +123,6 @@ def sync_sqlite_schema(engine, metadata):
 
     inspector = inspect(engine)
     executed_statements = []
-    existing_columns_by_table = {}
-
     with engine.begin() as connection:
         for table_name in sorted(DROP_TABLES):
             if not inspector.has_table(table_name):
@@ -140,8 +137,6 @@ def sync_sqlite_schema(engine, metadata):
                 continue
 
             db_columns = {column["name"] for column in inspector.get_columns(table_name)}
-            existing_columns_by_table[table_name] = db_columns
-
             for column in table.columns:
                 if column.name in db_columns:
                     continue
@@ -192,12 +187,14 @@ def sync_sqlite_schema(engine, metadata):
             executed_statements.append(statement)
             inspector = inspect(engine)
 
+        inspector = inspect(engine)
         for table_name, column_names in JSON_LIST_DEFAULTS.items():
             if not inspector.has_table(table_name):
                 continue
 
+            current_columns = {column["name"] for column in inspector.get_columns(table_name)}
             for column_name in column_names:
-                if column_name not in existing_columns_by_table.get(table_name, set()):
+                if column_name not in current_columns:
                     continue
 
                 connection.execute(
@@ -209,6 +206,7 @@ def sync_sqlite_schema(engine, metadata):
                     {"value": json.dumps([])},
                 )
 
+        inspector = inspect(engine)
         for table_name, table in metadata.tables.items():
             if not inspector.has_table(table_name):
                 continue
