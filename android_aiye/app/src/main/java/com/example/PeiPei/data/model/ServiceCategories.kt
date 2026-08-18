@@ -1,6 +1,6 @@
 // 文件说明：服务分类、类目常量或枚举定义。
 
-package com.example.Lulu.data.model
+package com.example.aiye.data.model
 
 /**
  * 服务类别预设。新建与展示时应归一化到该集合之一。

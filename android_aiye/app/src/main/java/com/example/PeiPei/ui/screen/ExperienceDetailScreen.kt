@@ -1,6 +1,6 @@
 // 文件说明：体验详情展示与操作界面（布局与服务详情页一致）。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import androidx.activity.compose.BackHandler
 import android.app.Activity
@@ -70,6 +70,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.AlertDialog
@@ -82,6 +83,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -111,28 +113,29 @@ import androidx.core.graphics.ColorUtils
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
-import com.example.Lulu.R
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.data.model.Experience
-import com.example.Lulu.data.remote.RetrofitClient
-import com.example.Lulu.data.model.Service
-import com.example.Lulu.data.model.ServiceDeclarations
-import com.example.Lulu.ui.navigation.Screen
-import com.example.Lulu.ui.viewmodel.PendingHostProfileHint
-import com.example.Lulu.ui.theme.BrandPink
-import com.example.Lulu.ui.theme.DialogTitleTopPadding
-import com.example.Lulu.ui.components.AllReviewsSheetContent
-import com.example.Lulu.ui.components.ProfileReviewsSection
-import com.example.Lulu.ui.components.ZoomableFitAsyncImage
-import com.example.Lulu.ui.components.hostProfileReviewsFromSummaries
+import com.example.aiye.R
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.data.model.Experience
+import com.example.aiye.data.model.User
+import com.example.aiye.data.remote.RetrofitClient
+import com.example.aiye.data.model.Service
+import com.example.aiye.data.model.ServiceDeclarations
+import com.example.aiye.ui.navigation.Screen
+import com.example.aiye.ui.viewmodel.PendingHostProfileHint
+import com.example.aiye.ui.theme.BrandPink
+import com.example.aiye.ui.theme.DialogTitleTopPadding
+import com.example.aiye.ui.components.AllReviewsSheetContent
+import com.example.aiye.ui.components.ProfileReviewsSection
+import com.example.aiye.ui.components.ZoomableFitAsyncImage
+import com.example.aiye.ui.components.hostProfileReviewsFromSummaries
 import kotlinx.coroutines.launch
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import android.view.WindowManager
-import com.example.Lulu.ui.util.findComposeDialogWindow
-import com.example.Lulu.util.serviceDetailBottomPriceHeadline
-import com.example.Lulu.util.textBundleForWeekdayParsing
-import com.example.Lulu.util.BookingTimeRangesCodec
+import com.example.aiye.ui.util.findComposeDialogWindow
+import com.example.aiye.util.serviceDetailBottomPriceHeadline
+import com.example.aiye.util.textBundleForWeekdayParsing
+import com.example.aiye.util.BookingTimeRangesCodec
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -552,8 +555,8 @@ fun ExperienceDetailScreen(
             "「$cat」${item.metaLine}。更多动线说明、集合地点与退改规则请在预订后与体验官确认。"
         }
     }
-    val detailSteps = remember(item, descriptionText) {
-        item.detailSteps.ifEmpty {
+    val detailSteps = remember(item, descriptionText, imageUrls) {
+        if (item.detailSteps.isEmpty()) {
             listOf(
                 DetailStepUi(
                     title = "体验亮点",
@@ -561,12 +564,14 @@ fun ExperienceDetailScreen(
                     imageUrls = imageUrls.take(3),
                 )
             )
-        }.map {
-            DetailStepUi(
-                title = it.title,
-                description = it.description,
-                imageUrls = it.imageUrls,
-            )
+        } else {
+            item.detailSteps.map {
+                DetailStepUi(
+                    title = it.title,
+                    description = it.description,
+                    imageUrls = it.imageUrls,
+                )
+            }
         }
     }
     val experiencePriceBasis = item.priceBasisText.ifBlank { "每人起" }
@@ -1347,6 +1352,7 @@ private fun buildServiceInquiryOutboundMessage(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ServiceInquiryComposeBottomSheet(
     creatorDisplayName: String,
@@ -1629,7 +1635,7 @@ private fun ServiceInquiryComposeBottomSheet(
                                     opt.priceText.takeIf { it.isNotBlank() }
                                 ).filterNotNull().joinToString(" · "),
                                 fontSize = 13.sp,
-                                color = RowSubtitleColor,
+                                color = InquiryComposeSubtitleGray,
                             )
                         }
                     }
@@ -1773,7 +1779,7 @@ private fun floorToDayStartMillis(timestampMillis: Long): Long {
     }
 }
 
-private fun parseAllowedWeekdays(service: com.example.Lulu.data.model.Service): Set<Int>? {
+private fun parseAllowedWeekdays(service: com.example.aiye.data.model.Service): Set<Int>? {
     val text = textBundleForWeekdayParsing(
         service.title,
         service.description,
@@ -1812,7 +1818,7 @@ private fun parseAllowedWeekdays(service: com.example.Lulu.data.model.Service): 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ServiceInquiryDatePickerDialog(
-    service: com.example.Lulu.data.model.Service,
+    service: com.example.aiye.data.model.Service,
     priceUnitLabel: String,
     initialSelectedDateMillis: Long?,
     onDismiss: () -> Unit,

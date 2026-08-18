@@ -1,6 +1,6 @@
 // 文件说明：发布服务时按类目提供「服务特点」与「额外费用」多选预设。
 
-package com.example.Lulu.data.model
+package com.example.aiye.data.model
 
 data class ServicePublishOptionGroup(
     val featureTags: List<String>,

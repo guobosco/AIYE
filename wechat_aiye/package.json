@@ -1,8 +1,8 @@
 {
-  "name": "wechat_isanya",
+  "name": "wechat_aiye",
   "version": "0.1.0",
   "private": true,
-  "description": "iSanya WeChat mini program built with Taro",
+  "description": "aiye WeChat mini program built with Taro",
   "scripts": {
     "dev:weapp": "taro build --type weapp --watch",
     "build:weapp": "taro build --type weapp",

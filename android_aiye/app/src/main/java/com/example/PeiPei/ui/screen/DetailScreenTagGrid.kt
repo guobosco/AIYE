@@ -1,6 +1,6 @@
 // 文件说明：服务/体验详情页标题下方的两列「图标 + 文案」标签网格。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -54,7 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.Lulu.data.model.ServiceCategories
+import com.example.aiye.data.model.ServiceCategories
 import java.util.Locale
 
 private val DetailTagIconTint = Color(0xFF222222)

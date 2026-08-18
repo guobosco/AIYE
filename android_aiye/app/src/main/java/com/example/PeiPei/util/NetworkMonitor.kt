@@ -1,6 +1,6 @@
 // 文件说明：网络可达性监听与连接状态 Flow/回调。
 
-package com.example.Lulu.util
+package com.example.aiye.util
 
 import android.content.Context
 import android.os.Build

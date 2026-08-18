@@ -1,6 +1,6 @@
 // 文件说明：服务/陪玩单等业务实体的数据模型。
 
-package com.example.Lulu.data.model
+package com.example.aiye.data.model
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity

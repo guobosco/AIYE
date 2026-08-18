@@ -1,6 +1,6 @@
 // 文件说明：扫码界面（相机解码、跳转等）。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import android.app.Application
 import android.Manifest
@@ -39,9 +39,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
-import com.example.Lulu.data.model.User
-import com.example.Lulu.data.repository.UserRepository
-import com.example.Lulu.ui.navigation.Screen
+import com.example.aiye.data.model.User
+import com.example.aiye.data.repository.UserRepository
+import com.example.aiye.ui.navigation.Screen
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage

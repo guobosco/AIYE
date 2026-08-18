@@ -1,6 +1,6 @@
 // 文件说明：系统权限说明与请求引导界面。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -21,9 +21,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavController
-import com.example.Lulu.service.PermissionService
-import com.example.Lulu.ui.components.ProfileGroup
-import com.example.Lulu.ui.components.ProfileItem
+import com.example.aiye.service.PermissionService
+import com.example.aiye.ui.components.ProfileGroup
+import com.example.aiye.ui.components.ProfileItem
 
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp

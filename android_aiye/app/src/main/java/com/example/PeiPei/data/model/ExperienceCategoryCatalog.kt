@@ -1,6 +1,6 @@
 // 文件说明：首页体验 Tab 与发布弹窗共用的纵向分类种子（单一数据源）。
 
-package com.example.Lulu.data.model
+package com.example.aiye.data.model
 
 data class ExperienceCategorySeed(
     val title: String,

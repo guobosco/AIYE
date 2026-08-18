@@ -1,6 +1,6 @@
 // 文件说明：人际关系、标签等关系类静态或配置数据。
 
-package com.example.Lulu.data.local
+package com.example.aiye.data.local
 
 object RelationshipData {
     // 关系代码：

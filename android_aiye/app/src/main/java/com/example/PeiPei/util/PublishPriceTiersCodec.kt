@@ -1,6 +1,6 @@
 // 文件说明：发布服务多档位价格与 priceText / priceBasisText 的互转（v2 结构化 + v1/纯文本兼容）。
 
-package com.example.Lulu.util
+package com.example.aiye.util
 
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName

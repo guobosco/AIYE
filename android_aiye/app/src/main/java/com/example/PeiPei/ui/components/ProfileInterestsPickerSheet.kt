@@ -1,6 +1,6 @@
 // 文件说明：编辑资料时选择兴趣爱好的底部面板，样式对齐设计稿。
 
-package com.example.Lulu.ui.components
+package com.example.aiye.ui.components
 
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
@@ -73,7 +73,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.example.Lulu.ui.theme.DialogTitleTopPadding
+import com.example.aiye.ui.theme.DialogTitleTopPadding
 import androidx.compose.ui.window.DialogProperties
 
 private val InkBlack = Color(0xFF000000)

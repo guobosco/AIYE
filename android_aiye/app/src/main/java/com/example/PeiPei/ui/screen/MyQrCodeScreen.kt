@@ -1,6 +1,6 @@
 // 文件说明：展示当前用户二维码（加好友等）的界面。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import android.content.ContentValues
 import android.content.Context
@@ -46,11 +46,11 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.Lulu.R
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.data.model.withAvatarIncludedInPhotoWall
-import com.example.Lulu.data.remote.RetrofitClient
-import com.example.Lulu.ui.navigation.Screen
+import com.example.aiye.R
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.data.model.withAvatarIncludedInPhotoWall
+import com.example.aiye.data.remote.RetrofitClient
+import com.example.aiye.ui.navigation.Screen
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
@@ -63,11 +63,11 @@ import androidx.compose.ui.graphics.toArgb
 
 import coil.imageLoader
 import coil.request.ImageRequest
-import com.example.Lulu.ui.theme.BrandPink
-import com.example.Lulu.ui.theme.BrandSecondaryDeep
-import com.example.Lulu.ui.theme.BrandPinkStrong
-import com.example.Lulu.ui.theme.TextPrimary
-import com.example.Lulu.ui.components.EditDialog
+import com.example.aiye.ui.theme.BrandPink
+import com.example.aiye.ui.theme.BrandSecondaryDeep
+import com.example.aiye.ui.theme.BrandPinkStrong
+import com.example.aiye.ui.theme.TextPrimary
+import com.example.aiye.ui.components.EditDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -107,7 +107,7 @@ fun MyQrCodeScreen(navController: NavController) {
     // Load default Logo Bitmap (Fallback)
     val logoBitmap = remember {
         try {
-            android.graphics.BitmapFactory.decodeResource(context.resources, com.example.Lulu.R.drawable.ic_logo)
+            android.graphics.BitmapFactory.decodeResource(context.resources, com.example.aiye.R.drawable.ic_logo)
         } catch (e: Exception) {
             null
         }
@@ -165,7 +165,7 @@ fun MyQrCodeScreen(navController: NavController) {
                     val repository = AppDataStore.getRepository()
                     if (repository != null) {
                         Toast.makeText(context, "正在上传头像...", Toast.LENGTH_SHORT).show()
-                        val serverUrl = com.example.Lulu.util.AvatarUploadUtil.processAndUploadAvatar(context, croppedUri, repository)
+                        val serverUrl = com.example.aiye.util.AvatarUploadUtil.processAndUploadAvatar(context, croppedUri, repository)
                         if (serverUrl != null) {
                             val updatedUser = AppDataStore.currentUser.value
                                 .withAvatarIncludedInPhotoWall(serverUrl)

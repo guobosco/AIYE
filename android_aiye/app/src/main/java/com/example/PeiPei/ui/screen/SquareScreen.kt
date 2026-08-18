@@ -1,6 +1,6 @@
 // 文件说明：广场/动态流等社区内容列表界面。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import android.app.Activity
 import android.widget.Toast
@@ -87,14 +87,14 @@ import androidx.compose.ui.zIndex
 import androidx.navigation.NavController
 import androidx.core.view.WindowCompat
 import coil.compose.AsyncImage
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.data.remote.RetrofitClient
-import com.example.Lulu.data.model.Service
-import com.example.Lulu.data.repository.LuluRepository
-import com.example.Lulu.ui.components.FeiLingPullRefreshHintIndicator
-import com.example.Lulu.ui.components.FeiLingTopSyncIndicator
-import com.example.Lulu.ui.navigation.Screen
-import com.example.Lulu.ui.util.PullRefreshTokens
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.data.remote.RetrofitClient
+import com.example.aiye.data.model.Service
+import com.example.aiye.data.repository.LuluRepository
+import com.example.aiye.ui.components.FeiLingPullRefreshHintIndicator
+import com.example.aiye.ui.components.FeiLingTopSyncIndicator
+import com.example.aiye.ui.navigation.Screen
+import com.example.aiye.ui.util.PullRefreshTokens
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.math.absoluteValue
@@ -623,7 +623,7 @@ private fun WishlistExpandedServiceCard(
             Text(
                 text = listOf(
                     service.category,
-                    com.example.Lulu.util.ServiceLocationPolygonCodec.displayLine(service.location)
+                    com.example.aiye.util.ServiceLocationPolygonCodec.displayLine(service.location)
                 ).filter { it.isNotBlank() }.joinToString(" | ")
                     .ifBlank { creatorName },
                 color = secondaryText,

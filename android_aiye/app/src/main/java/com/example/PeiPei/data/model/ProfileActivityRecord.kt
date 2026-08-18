@@ -1,4 +1,4 @@
-package com.example.Lulu.data.model
+package com.example.aiye.data.model
 
 data class ViewedServiceRecord(
     val serviceId: String,

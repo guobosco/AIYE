@@ -1,6 +1,6 @@
 // 文件说明：微信登录后绑定手机号的界面。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import android.widget.Toast
 import androidx.compose.foundation.background
@@ -22,10 +22,10 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.data.model.hasCompletedOnboardingProfile
-import com.example.Lulu.data.repository.LuluRepository
-import com.example.Lulu.ui.navigation.Screen
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.data.model.hasCompletedOnboardingProfile
+import com.example.aiye.data.repository.LuluRepository
+import com.example.aiye.ui.navigation.Screen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random

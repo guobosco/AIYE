@@ -1,6 +1,6 @@
 // 文件说明：聊天 WebSocket 客户端，负责长连接与实时消息。
 
-package com.example.Lulu.data.remote
+package com.example.aiye.data.remote
 
 import android.util.Log
 import okhttp3.Request

@@ -1,6 +1,6 @@
 // 文件说明：行政区划文案匹配（首页卡片发布地等展示用）。
 
-package com.example.Lulu.ui.util
+package com.example.aiye.ui.util
 
 /**
  * 自左向右尝试匹配行政区划连写（长路径优先）。

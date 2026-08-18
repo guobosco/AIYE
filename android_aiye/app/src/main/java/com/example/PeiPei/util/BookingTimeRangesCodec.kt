@@ -1,6 +1,6 @@
 // 文件说明：服务可预约时段（多段 HH:mm）的 JSON 编解码与展示文案。
 
-package com.example.Lulu.util
+package com.example.aiye.util
 
 import kotlin.math.abs
 import kotlin.math.round

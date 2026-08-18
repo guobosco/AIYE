@@ -1,6 +1,6 @@
 // 文件说明：服务/商品详情展示与操作界面。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import android.app.Activity
 import android.app.Application
@@ -116,34 +116,34 @@ import androidx.core.graphics.ColorUtils
 import coil.compose.AsyncImage
 import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
-import com.example.Lulu.R
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.data.remote.RetrofitClient
-import com.example.Lulu.data.model.Service
-import com.example.Lulu.data.model.ServiceCategories
-import com.example.Lulu.data.model.ServiceDeclarations
-import com.example.Lulu.data.model.ServicePublishTaxonomy
-import com.example.Lulu.data.model.User
-import com.example.Lulu.data.repository.UserRepository
-import com.example.Lulu.ui.navigation.Screen
-import com.example.Lulu.ui.viewmodel.PendingHostProfileHint
-import com.example.Lulu.ui.theme.BrandPink
-import com.example.Lulu.ui.theme.BrandPinkSoft
-import com.example.Lulu.ui.theme.DialogTitleTopPadding
-import com.example.Lulu.ui.components.AllReviewsSheetContent
-import com.example.Lulu.ui.components.ProfileReviewsSection
-import com.example.Lulu.ui.components.PublishPriceSettingsBottomSheet
-import com.example.Lulu.ui.components.ZoomableFitAsyncImage
-import com.example.Lulu.ui.components.hostProfileReviewsFromSummaries
+import com.example.aiye.R
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.data.remote.RetrofitClient
+import com.example.aiye.data.model.Service
+import com.example.aiye.data.model.ServiceCategories
+import com.example.aiye.data.model.ServiceDeclarations
+import com.example.aiye.data.model.ServicePublishTaxonomy
+import com.example.aiye.data.model.User
+import com.example.aiye.data.repository.UserRepository
+import com.example.aiye.ui.navigation.Screen
+import com.example.aiye.ui.viewmodel.PendingHostProfileHint
+import com.example.aiye.ui.theme.BrandPink
+import com.example.aiye.ui.theme.BrandPinkSoft
+import com.example.aiye.ui.theme.DialogTitleTopPadding
+import com.example.aiye.ui.components.AllReviewsSheetContent
+import com.example.aiye.ui.components.ProfileReviewsSection
+import com.example.aiye.ui.components.PublishPriceSettingsBottomSheet
+import com.example.aiye.ui.components.ZoomableFitAsyncImage
+import com.example.aiye.ui.components.hostProfileReviewsFromSummaries
 import kotlinx.coroutines.launch
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import android.view.WindowManager
-import com.example.Lulu.ui.util.findComposeDialogWindow
-import com.example.Lulu.util.BookingTimeRangesCodec
-import com.example.Lulu.util.priceBasisTextForUiDisplay
-import com.example.Lulu.util.serviceDetailBottomPriceHeadline
-import com.example.Lulu.util.textBundleForWeekdayParsing
+import com.example.aiye.ui.util.findComposeDialogWindow
+import com.example.aiye.util.BookingTimeRangesCodec
+import com.example.aiye.util.priceBasisTextForUiDisplay
+import com.example.aiye.util.serviceDetailBottomPriceHeadline
+import com.example.aiye.util.textBundleForWeekdayParsing
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -608,7 +608,7 @@ fun ServiceDetailScreen(
     val cleanId = serviceId?.trim()
     val serviceFlow = remember(cleanId) {
         if (cleanId.isNullOrEmpty()) {
-            kotlinx.coroutines.flow.flowOf<com.example.Lulu.data.model.Service?>(null)
+            kotlinx.coroutines.flow.flowOf<com.example.aiye.data.model.Service?>(null)
         } else {
             AppDataStore.getServiceFlow(cleanId)
         }
@@ -1981,7 +1981,7 @@ private fun floorToDayStartMillis(timestampMillis: Long): Long {
     }
 }
 
-private fun parseAllowedWeekdays(service: com.example.Lulu.data.model.Service): Set<Int>? {
+private fun parseAllowedWeekdays(service: com.example.aiye.data.model.Service): Set<Int>? {
     val text = textBundleForWeekdayParsing(
         service.title,
         service.description,
@@ -2020,7 +2020,7 @@ private fun parseAllowedWeekdays(service: com.example.Lulu.data.model.Service): 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ServiceInquiryDatePickerDialog(
-    service: com.example.Lulu.data.model.Service,
+    service: com.example.aiye.data.model.Service,
     priceUnitLabel: String,
     initialSelectedDateMillis: Long?,
     onDismiss: () -> Unit,

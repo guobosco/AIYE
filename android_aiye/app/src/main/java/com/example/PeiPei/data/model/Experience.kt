@@ -1,4 +1,4 @@
-package com.example.Lulu.data.model
+package com.example.aiye.data.model
 
 import com.google.gson.annotations.SerializedName
 

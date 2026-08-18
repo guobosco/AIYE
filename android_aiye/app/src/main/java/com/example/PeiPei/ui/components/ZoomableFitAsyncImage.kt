@@ -1,6 +1,6 @@
 // 文件说明：全屏「适应屏幕」图片的双指缩放、拖拽平移（无双击放大）。
 
-package com.example.Lulu.ui.components
+package com.example.aiye.ui.components
 
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown

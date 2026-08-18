@@ -1,6 +1,6 @@
 // 文件说明：从 Compose Dialog 内的 View 解析其宿主 Window（与 Activity 主窗口不同）。
 
-package com.example.Lulu.ui.util
+package com.example.aiye.ui.util
 
 import android.content.Context
 import android.content.ContextWrapper

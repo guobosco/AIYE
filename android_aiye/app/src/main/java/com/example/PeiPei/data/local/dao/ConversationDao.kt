@@ -1,12 +1,12 @@
 // 文件说明：会话表的 Room DAO，会话列表与元数据访问。
 
-package com.example.Lulu.data.local.dao
+package com.example.aiye.data.local.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import com.example.Lulu.data.model.ChatConversation
+import com.example.aiye.data.model.ChatConversation
 import kotlinx.coroutines.flow.Flow
 
 @Dao

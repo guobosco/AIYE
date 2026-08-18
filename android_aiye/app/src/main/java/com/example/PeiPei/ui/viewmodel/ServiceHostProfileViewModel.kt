@@ -1,15 +1,15 @@
 // 文件说明：服务主主页数据加载与交互（ViewModel）。
 
-package com.example.Lulu.ui.viewmodel
+package com.example.aiye.ui.viewmodel
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.Lulu.data.local.AppDatabase
-import com.example.Lulu.data.model.Service
-import com.example.Lulu.data.model.User
-import com.example.Lulu.data.repository.LuluRepository
-import com.example.Lulu.data.repository.UserRepository
+import com.example.aiye.data.local.AppDatabase
+import com.example.aiye.data.model.Service
+import com.example.aiye.data.model.User
+import com.example.aiye.data.repository.LuluRepository
+import com.example.aiye.data.repository.UserRepository
 import java.io.IOException
 import kotlinx.coroutines.Job
 import retrofit2.HttpException

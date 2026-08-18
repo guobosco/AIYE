@@ -1,6 +1,6 @@
 // 文件说明：联系人列表相关的共用小组件（搜索条、行项等）。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -41,9 +41,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import com.example.Lulu.data.model.User
-import com.example.Lulu.data.remote.RetrofitClient
-import com.example.Lulu.ui.navigation.Screen
+import com.example.aiye.data.model.User
+import com.example.aiye.data.remote.RetrofitClient
+import com.example.aiye.ui.navigation.Screen
 @Composable
 fun SearchBar(
     query: String,

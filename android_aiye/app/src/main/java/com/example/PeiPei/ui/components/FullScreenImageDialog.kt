@@ -1,6 +1,6 @@
 // 文件说明：全屏查看图片的对话框或覆盖层。
 
-package com.example.Lulu.ui.components
+package com.example.aiye.ui.components
 
 import android.app.Activity
 import android.content.Context
@@ -29,8 +29,8 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.view.WindowCompat
 import androidx.compose.material3.Text
 import androidx.compose.foundation.shape.RoundedCornerShape
-import com.example.Lulu.data.remote.RetrofitClient
-import com.example.Lulu.ui.util.findComposeDialogWindow
+import com.example.aiye.data.remote.RetrofitClient
+import com.example.aiye.ui.util.findComposeDialogWindow
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this

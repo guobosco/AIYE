@@ -13,14 +13,14 @@
 ## 当前假设
 1. iOS 当前连接的不是本仓库最新后端地址，而是旧环境。
 2. 当前连接的后端地址可达，但未部署 `/chat/conversations/direct/{peerId}` 接口。
-3. iOS 端 `ISANYA_BASE_URL` 配置和我本地构建使用的地址不一致。
+3. iOS 端 `AIYE_BASE_URL` 配置和我本地构建使用的地址不一致。
 4. 服务端接口已存在，但实际返回了 404/405，前端错误映射把它翻译成“未部署接口”。
 5. 当前用户鉴权或目标用户参数异常，触发了别的服务端错误，但展示文案掩盖了真实原因。
 
 ## 证据记录
 - `xcodebuild -showBuildSettings` 结果：
-  - `ISANYA_BASE_URL = https://123.57.67.153`
-  - `ISANYA_ALLOW_INSECURE_HTTPS = YES`
+  - `AIYE_BASE_URL = https://123.57.67.153`
+  - `AIYE_ALLOW_INSECURE_HTTPS = YES`
 - `curl -k -i https://123.57.67.153/healthz`
   - 返回 `200 OK`
   - 响应体：`{"status":"ok","environment":"development"}`
@@ -36,7 +36,7 @@
    - 部分成立：iOS 当前实际连接的是 `https://123.57.67.153`，不是本地开发地址。
 2. `当前连接的后端地址可达，但未部署 /chat/conversations/direct/{peerId} 接口。`
    - 成立。
-3. `iOS 端 ISANYA_BASE_URL 配置和我本地构建使用的地址不一致。`
+3. `iOS 端 AIYE_BASE_URL 配置和我本地构建使用的地址不一致。`
    - 成立。
 4. `服务端接口已存在，但实际返回了 404/405，前端错误映射把它翻译成“未部署接口”。`
    - 成立，实际响应为 `404 Not Found`。
@@ -45,4 +45,4 @@
 
 ## 下一步
 - 部署带聊天接口的后端到 `https://123.57.67.153`
-- 或把 iOS `ISANYA_BASE_URL` 切到已部署聊天接口的后端环境
+- 或把 iOS `AIYE_BASE_URL` 切到已部署聊天接口的后端环境

@@ -1,6 +1,6 @@
 // 文件说明：加载中、空状态等通用指示 UI 组件。
 
-package com.example.Lulu.ui.components
+package com.example.aiye.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn

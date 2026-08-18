@@ -1,6 +1,6 @@
 // 文件说明：发布者从日历头像进入的订单详情（演示数据，占位页）。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -30,8 +30,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.ui.components.CommonAvatar
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.ui.components.CommonAvatar
 private val PageBg = Color(0xFFFFFFFF)
 private val TitleInk = Color(0xFF000000)
 private val Muted = Color(0xFF666666)

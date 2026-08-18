@@ -1,6 +1,6 @@
 // 文件说明：个人资料页相关的可复用 UI 片段。
 
-package com.example.Lulu.ui.components
+package com.example.aiye.ui.components
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -45,8 +45,8 @@ import android.view.WindowManager
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
-import com.example.Lulu.ui.theme.DialogTitleTopPadding
-import com.example.Lulu.ui.util.findComposeDialogWindow
+import com.example.aiye.ui.theme.DialogTitleTopPadding
+import com.example.aiye.ui.util.findComposeDialogWindow
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -59,7 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.Lulu.data.local.RegionData
+import com.example.aiye.data.local.RegionData
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt

@@ -1,13 +1,13 @@
 // 文件说明：头像选择与上传到服务器的工具方法。
 
-package com.example.Lulu.util
+package com.example.aiye.util
 
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import com.example.Lulu.data.repository.LuluRepository
-import com.example.Lulu.data.remote.RetrofitClient
+import com.example.aiye.data.repository.LuluRepository
+import com.example.aiye.data.remote.RetrofitClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File

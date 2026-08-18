@@ -1,6 +1,6 @@
 // 文件说明：当前用户编辑个人资料的界面。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
@@ -39,24 +39,24 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.data.model.MAX_PROFILE_WALL_IMAGE_COUNT
-import com.example.Lulu.data.model.heightWeightEditRowValue
-import com.example.Lulu.data.model.withAvatarIncludedInPhotoWall
-import com.example.Lulu.ui.components.ProfileHeightWeightBottomSheet
-import com.example.Lulu.ui.components.ProfileInterestsPickerDialog
-import com.example.Lulu.ui.components.ProfileItem
-import com.example.Lulu.ui.components.ProfileOptionPickerBottomSheet
-import com.example.Lulu.ui.components.ProfileUniversityPickerBottomSheet
-import com.example.Lulu.ui.components.ProfileTextEditBottomSheet
-import com.example.Lulu.ui.components.defaultProfileInterestPresets
-import com.example.Lulu.ui.components.RegionPickerDialog
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.data.model.MAX_PROFILE_WALL_IMAGE_COUNT
+import com.example.aiye.data.model.heightWeightEditRowValue
+import com.example.aiye.data.model.withAvatarIncludedInPhotoWall
+import com.example.aiye.ui.components.ProfileHeightWeightBottomSheet
+import com.example.aiye.ui.components.ProfileInterestsPickerDialog
+import com.example.aiye.ui.components.ProfileItem
+import com.example.aiye.ui.components.ProfileOptionPickerBottomSheet
+import com.example.aiye.ui.components.ProfileUniversityPickerBottomSheet
+import com.example.aiye.ui.components.ProfileTextEditBottomSheet
+import com.example.aiye.ui.components.defaultProfileInterestPresets
+import com.example.aiye.ui.components.RegionPickerDialog
 import java.util.Calendar
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import android.net.Uri
 import coil.compose.AsyncImage
-import com.example.Lulu.data.remote.RetrofitClient
+import com.example.aiye.data.remote.RetrofitClient
 import androidx.compose.ui.layout.ContentScale
 import kotlinx.coroutines.launch
 import com.yalantis.ucrop.UCrop
@@ -176,7 +176,7 @@ private fun MyProfileEditContent(
                     val repository = AppDataStore.getRepository()
                     if (repository != null) {
                         Toast.makeText(context, "正在上传头像...", Toast.LENGTH_SHORT).show()
-                        val serverUrl = com.example.Lulu.util.AvatarUploadUtil.processAndUploadAvatar(context, croppedUri, repository)
+                        val serverUrl = com.example.aiye.util.AvatarUploadUtil.processAndUploadAvatar(context, croppedUri, repository)
                         if (serverUrl != null) {
                             val updatedUser = AppDataStore.currentUser.value
                                 .withAvatarIncludedInPhotoWall(serverUrl)
@@ -242,7 +242,7 @@ private fun MyProfileEditContent(
                 val uploadedUrls = mutableListOf<String>()
                 pendingUris.forEach { uri ->
                     val serverUrl =
-                        com.example.Lulu.util.AvatarUploadUtil.processAndUploadProfilePhoto(
+                        com.example.aiye.util.AvatarUploadUtil.processAndUploadProfilePhoto(
                             context = context,
                             uri = uri,
                             repository = repository

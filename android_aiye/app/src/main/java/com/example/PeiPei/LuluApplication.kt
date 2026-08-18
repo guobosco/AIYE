@@ -1,6 +1,6 @@
 // 文件说明：Application 入口类，负责全局初始化（如依赖、主题等）。
 
-package com.example.Lulu
+package com.example.aiye
 
 /**
  * 应用入口与全局初始化文件。
@@ -12,12 +12,12 @@ import android.app.Application
 import android.app.PendingIntent
 import android.content.Intent
 import android.os.Bundle
-import com.example.Lulu.data.local.AppDatabase
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.data.repository.LuluRepository
-import com.example.Lulu.service.NotificationService
-import com.example.Lulu.ui.MainActivity
-import com.example.Lulu.util.BadgeUtils
+import com.example.aiye.data.local.AppDatabase
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.data.repository.LuluRepository
+import com.example.aiye.service.NotificationService
+import com.example.aiye.ui.MainActivity
+import com.example.aiye.util.BadgeUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
@@ -34,9 +34,9 @@ import android.content.SharedPreferences
 import androidx.appcompat.app.AppCompatDelegate
 import com.amap.api.maps.MapsInitializer
 
-import com.example.Lulu.data.remote.AuthSession
-import com.example.Lulu.data.remote.RetrofitClient
-import com.example.Lulu.data.model.User
+import com.example.aiye.data.remote.AuthSession
+import com.example.aiye.data.remote.RetrofitClient
+import com.example.aiye.data.model.User
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.request.CachePolicy
@@ -94,7 +94,7 @@ class LuluApplication : Application(), Application.ActivityLifecycleCallbacks, I
         AppDataStore.initialize(repository)
 
         applicationScope.launch(startupExceptionHandler) {
-            repository.newChatMessageFlow.collect { message: com.example.Lulu.data.model.ChatMessage ->
+            repository.newChatMessageFlow.collect { message: com.example.aiye.data.model.ChatMessage ->
                 runCatching {
                     val conversation = repository.getConversationById(message.conversationId).first()
                     val title = conversation?.title?.ifBlank { "新消息" } ?: "新消息"

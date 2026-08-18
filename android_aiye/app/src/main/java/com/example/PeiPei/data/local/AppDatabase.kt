@@ -1,6 +1,6 @@
 // 文件说明：Room 数据库定义，集中声明实体、DAO 与数据库版本。
 
-package com.example.Lulu.data.local
+package com.example.aiye.data.local
 
 import android.content.Context
 import androidx.room.Database
@@ -9,16 +9,16 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.example.Lulu.data.local.dao.ChatMessageDao
-import com.example.Lulu.data.local.dao.ConversationDao
-import com.example.Lulu.data.local.dao.ConversationMemberDao
-import com.example.Lulu.data.local.dao.ServiceDao
-import com.example.Lulu.data.local.dao.UserDao
-import com.example.Lulu.data.model.ChatConversation
-import com.example.Lulu.data.model.ChatConversationMember
-import com.example.Lulu.data.model.ChatMessage
-import com.example.Lulu.data.model.Service
-import com.example.Lulu.data.model.User
+import com.example.aiye.data.local.dao.ChatMessageDao
+import com.example.aiye.data.local.dao.ConversationDao
+import com.example.aiye.data.local.dao.ConversationMemberDao
+import com.example.aiye.data.local.dao.ServiceDao
+import com.example.aiye.data.local.dao.UserDao
+import com.example.aiye.data.model.ChatConversation
+import com.example.aiye.data.model.ChatConversationMember
+import com.example.aiye.data.model.ChatMessage
+import com.example.aiye.data.model.Service
+import com.example.aiye.data.model.User
 
 @Database(
     entities = [

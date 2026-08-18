@@ -1,6 +1,6 @@
 // 文件说明：发布者在日历上为某日设置的「不可订」规则（本地演示，可接后端替换）。
 
-package com.example.Lulu.data.model
+package com.example.aiye.data.model
 
 /**
  * 某日非「可订」时的规则。未出现在本地映射中即视为可订。

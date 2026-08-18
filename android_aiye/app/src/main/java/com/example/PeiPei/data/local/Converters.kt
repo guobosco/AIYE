@@ -1,9 +1,9 @@
 // 文件说明：Room 类型转换器，在数据库与 Kotlin 类型之间做序列化/反序列化。
 
-package com.example.Lulu.data.local
+package com.example.aiye.data.local
 
 import androidx.room.TypeConverter
-import com.example.Lulu.data.model.Comment
+import com.example.aiye.data.model.Comment
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.util.Date

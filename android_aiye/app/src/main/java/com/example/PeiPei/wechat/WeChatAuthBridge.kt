@@ -1,7 +1,7 @@
-package com.example.Lulu.wechat
+package com.example.aiye.wechat
 
 import android.content.Intent
-import com.example.Lulu.BuildConfig
+import com.example.aiye.BuildConfig
 import java.util.UUID
 
 data class WeChatAuthPayload(

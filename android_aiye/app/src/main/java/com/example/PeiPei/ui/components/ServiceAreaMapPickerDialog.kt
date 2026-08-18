@@ -1,6 +1,6 @@
 // 文件说明：发布服务时在高德地图上点击选点构成多边形服务区域（底部下拉弹窗）。
 
-package com.example.Lulu.ui.components
+package com.example.aiye.ui.components
 
 import android.graphics.Color as AndroidColor
 import android.location.Geocoder
@@ -48,7 +48,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.Lulu.ui.theme.DialogTitleTopPadding
+import com.example.aiye.ui.theme.DialogTitleTopPadding
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
@@ -65,7 +65,7 @@ import com.amap.api.maps.model.Polygon
 import com.amap.api.maps.model.PolygonOptions
 import com.amap.api.maps.model.Polyline
 import com.amap.api.maps.model.PolylineOptions
-import com.example.Lulu.util.ServiceLocationPolygonCodec
+import com.example.aiye.util.ServiceLocationPolygonCodec
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

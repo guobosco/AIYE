@@ -66,8 +66,8 @@ dependencyResolutionManagement {
 }
 
 // 根项目配置
-// 设置根项目名称为 "Lulu"
-rootProject.name = "Lulu"
+// 设置根项目名称为 "aiye"
+rootProject.name = "aiye"
 
 // 包含子模块
 // 将 ":app" 模块包含到项目中

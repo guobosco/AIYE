@@ -1,6 +1,6 @@
 // 文件说明：资产或内容分类的数据模型定义。
 
-package com.example.Lulu.data.model
+package com.example.aiye.data.model
 
 object AssetCategories {
     data class CategoryNode(

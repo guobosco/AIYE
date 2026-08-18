@@ -10,11 +10,11 @@ val devApiBaseUrl = providers.gradleProperty("DEV_API_BASE_URL").orElse(localApi
 val prodApiBaseUrl = providers.gradleProperty("PROD_API_BASE_URL").orElse(localApiBaseUrl).get()
 
 android {
-    namespace = "com.example.Lulu"
+    namespace = "com.example.aiye"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.Lulu"
+        applicationId = "com.example.aiye"
         minSdk = 21
         targetSdk = 34
         versionCode = 1
@@ -33,7 +33,7 @@ android {
             abiFilters += "x86_64"
         }
 
-        // 高德地图 Key：在 gradle.properties 中设置 AMAP_API_KEY=你的Key（控制台绑定包名 com.example.Lulu 与 SHA1）
+        // 高德地图 Key：在 gradle.properties 中设置 AMAP_API_KEY=你的Key（控制台绑定包名 com.example.aiye 与 SHA1）
         manifestPlaceholders["AMAP_API_KEY"] =
             providers.gradleProperty("AMAP_API_KEY").orElse("").get()
         val wechatAppId = providers.gradleProperty("WECHAT_APP_ID").orElse("").get()
@@ -64,9 +64,9 @@ android {
     /*
     signingConfigs {
         create("release") {
-            storeFile = file("../Lulu.keystore")
+            storeFile = file("../aiye.keystore")
             storePassword = "android"
-            keyAlias = "Lulu"
+            keyAlias = "aiye"
             keyPassword = "android"
         }
     }

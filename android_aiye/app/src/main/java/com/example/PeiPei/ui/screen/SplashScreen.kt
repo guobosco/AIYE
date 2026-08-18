@@ -1,6 +1,6 @@
 // 文件说明：启动闪屏与冷启动路由判断。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -18,9 +18,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 import androidx.navigation.NavController
-import com.example.Lulu.R
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.ui.navigation.Screen
+import com.example.aiye.R
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.ui.navigation.Screen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 

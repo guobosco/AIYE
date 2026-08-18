@@ -1,6 +1,6 @@
 // 文件说明：聊天「发送位置」全屏地图选点（高德底图 + 逆地理周边列表 + 关键词 POI 搜索）。
 
-package com.example.Lulu.ui.components
+package com.example.aiye.ui.components
 
 import android.Manifest
 import android.annotation.SuppressLint

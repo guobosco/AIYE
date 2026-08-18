@@ -1,6 +1,6 @@
 // 文件说明：服务声明平台默认条目与用户自定义条目的归一与合并。
 
-package com.example.Lulu.data.model
+package com.example.aiye.data.model
 
 object ServiceDeclarations {
     /** 平台默认声明，始终展示且不可由用户删除。 */

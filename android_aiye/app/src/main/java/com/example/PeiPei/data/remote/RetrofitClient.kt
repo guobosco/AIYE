@@ -1,9 +1,9 @@
 // 文件说明：Retrofit/OkHttp 客户端单例或工厂，统一网络配置。
 
-package com.example.Lulu.data.remote
+package com.example.aiye.data.remote
 
-import com.example.Lulu.BuildConfig
-import com.example.Lulu.data.model.User
+import com.example.aiye.BuildConfig
+import com.example.aiye.data.model.User
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.JsonArray

@@ -1,6 +1,6 @@
 // 文件说明：发布服务前置的「选择服务类别」全屏弹窗。
 
-package com.example.Lulu.ui.components
+package com.example.aiye.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -69,9 +69,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.Lulu.data.model.ServiceCategories
-import com.example.Lulu.data.model.experienceCategorySeeds
-import com.example.Lulu.ui.theme.DialogTitleTopPadding
+import com.example.aiye.data.model.ServiceCategories
+import com.example.aiye.data.model.experienceCategorySeeds
+import com.example.aiye.ui.theme.DialogTitleTopPadding
 
 /**
  * 发布流程第一步：选择服务类别。关闭前需点选类目或「跳过」。

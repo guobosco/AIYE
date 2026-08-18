@@ -1,20 +1,20 @@
-# iSanya iOS（SwiftUI）
+# aiye iOS（SwiftUI）
 
-本目录是 iSanya 的 iOS 版本源码骨架（SwiftUI 为主，CoreData 持久化，高德地图后续接入）。CoreData 目前使用代码定义的 Model（无需 .xcdatamodeld），后续也可按需要迁移为可视化模型文件。
+本目录是 aiye 的 iOS 版本源码骨架（SwiftUI 为主，CoreData 持久化，高德地图后续接入）。CoreData 目前使用代码定义的 Model（无需 .xcdatamodeld），后续也可按需要迁移为可视化模型文件。
 
 ## 1. 在 Xcode 创建工程
 
 1. 打开 Xcode → Create a new Xcode project
 2. 选择 iOS → App
-3. Product Name：`iSanya`
+3. Product Name：`aiye`
 4. Interface：SwiftUI
 5. Language：Swift
 6. 勾选 Use Core Data
-7. 将工程创建在仓库目录：`ios_isanya/` 下（例如 `ios_isanya/iSanya/`）
+7. 将工程创建在仓库目录：`ios_aiye/aiye/aiye/` 下
 
 ## 2. 将本目录代码加入工程
 
-将 `ios_isanya/iSanya/` 下的文件夹整体拖入 Xcode 工程（Create groups 勾选、并确保 Target Membership 选中 App target）。
+当前工程文件位于 `ios_aiye/aiye/aiye/aiye.xcodeproj`，App 源码目录位于 `ios_aiye/aiye/aiye/aiye/`。
 
 目录结构（当前已生成）：
 - `App/`：App 入口、RootView、Tab 壳、AppContainer
@@ -25,16 +25,16 @@
 ## 3. 配置 BaseURL（开发环境）
 
 在工程的 Info.plist 增加键：
-- `ISANYA_BASE_URL`（String）
+- `AIYE_BASE_URL`（String）
   - Debug：`https://123.57.67.153`
   - Release：`https://123.57.67.153`
 
 不配置时也建议统一使用 `https://123.57.67.153`，不要再配回 `:8000`。
 
 如果你希望按 Debug/Release 分环境配置，推荐用 Build Setting 注入：
-1. 在 Target → Build Settings → User-Defined 新增 `ISANYA_BASE_URL`
+1. 在 Target → Build Settings → User-Defined 新增 `AIYE_BASE_URL`
 2. 在 Debug/Release 分别填不同值
-3. 在 Info.plist 的 `ISANYA_BASE_URL` 值填写 `$(ISANYA_BASE_URL)`
+3. 在 Info.plist 的 `AIYE_BASE_URL` 值填写 `$(AIYE_BASE_URL)`
 
 当前推荐走 `nginx` 暴露的 HTTPS 入口，一般不需要为 HTTP 请求额外放开 ATS。
 

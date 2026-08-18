@@ -1,6 +1,6 @@
 // 文件说明：发布服务通用多选弹层，用于服务特点、额外费用等固定标签选择。
 
-package com.example.Lulu.ui.components
+package com.example.aiye.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,7 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.Lulu.ui.theme.DialogTitleTopPadding
+import com.example.aiye.ui.theme.DialogTitleTopPadding
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable

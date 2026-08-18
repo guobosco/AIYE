@@ -1,6 +1,6 @@
 // 文件说明：创建或编辑服务/陪玩单的表单界面。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import android.Manifest
 import android.net.Uri
@@ -51,16 +51,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.navigation.NavController
-import com.example.Lulu.R
-import com.example.Lulu.ui.navigation.Screen
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.data.model.PublishFormContentCatalog
-import com.example.Lulu.data.model.ServiceCategories
-import com.example.Lulu.data.model.ServicePublishTaxonomy
-import com.example.Lulu.data.model.User
-import com.example.Lulu.ui.components.PrimaryGradientButton
-import com.example.Lulu.ui.theme.DialogTitleTopPadding
-import com.example.Lulu.ui.theme.ErrorRed
+import com.example.aiye.R
+import com.example.aiye.ui.navigation.Screen
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.data.model.PublishFormContentCatalog
+import com.example.aiye.data.model.ServiceCategories
+import com.example.aiye.data.model.ServicePublishTaxonomy
+import com.example.aiye.data.model.User
+import com.example.aiye.ui.components.PrimaryGradientButton
+import com.example.aiye.ui.theme.DialogTitleTopPadding
+import com.example.aiye.ui.theme.ErrorRed
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
@@ -93,21 +93,21 @@ import androidx.compose.ui.input.pointer.consumeAllChanges
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.viewinterop.AndroidView
-import com.example.Lulu.util.BookingTimeRangesCodec
-import com.example.Lulu.util.DURATION_UNIT_HOURS
-import com.example.Lulu.util.decodePublishPriceTiers
-import com.example.Lulu.util.normalizeDurationUnit
-import com.example.Lulu.util.BookingTimeSlot
-import com.example.Lulu.util.ServiceImageProcessingUtil
-import com.example.Lulu.util.ServiceLocationPolygonCodec
-import com.example.Lulu.ui.components.PublishPriceSettingsBottomSheet
-import com.example.Lulu.ui.components.BookingTimeRangesPickerBottomSheet
-import com.example.Lulu.ui.components.OrderAcceptanceSettingsBottomSheet
-import com.example.Lulu.ui.components.orderAcceptanceSettingSummary
-import com.example.Lulu.ui.components.ServiceDeclarationsPickerBottomSheet
-import com.example.Lulu.ui.components.ServiceCategoryPickerGateDialog
-import com.example.Lulu.ui.components.ServiceTagMultiSelectBottomSheet
-import com.example.Lulu.ui.components.RegionPickerDialog
+import com.example.aiye.util.BookingTimeRangesCodec
+import com.example.aiye.util.DURATION_UNIT_HOURS
+import com.example.aiye.util.decodePublishPriceTiers
+import com.example.aiye.util.normalizeDurationUnit
+import com.example.aiye.util.BookingTimeSlot
+import com.example.aiye.util.ServiceImageProcessingUtil
+import com.example.aiye.util.ServiceLocationPolygonCodec
+import com.example.aiye.ui.components.PublishPriceSettingsBottomSheet
+import com.example.aiye.ui.components.BookingTimeRangesPickerBottomSheet
+import com.example.aiye.ui.components.OrderAcceptanceSettingsBottomSheet
+import com.example.aiye.ui.components.orderAcceptanceSettingSummary
+import com.example.aiye.ui.components.ServiceDeclarationsPickerBottomSheet
+import com.example.aiye.ui.components.ServiceCategoryPickerGateDialog
+import com.example.aiye.ui.components.ServiceTagMultiSelectBottomSheet
+import com.example.aiye.ui.components.RegionPickerDialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 
@@ -2049,9 +2049,9 @@ fun ServiceTextEditDialog(
 @Composable
 private fun PublishCopyTemplateDialog(
     category: String?,
-    templates: List<com.example.Lulu.data.model.PublishCopyTemplate>,
+    templates: List<com.example.aiye.data.model.PublishCopyTemplate>,
     onDismiss: () -> Unit,
-    onApply: (com.example.Lulu.data.model.PublishCopyTemplate) -> Unit,
+    onApply: (com.example.aiye.data.model.PublishCopyTemplate) -> Unit,
 ) {
     val scrollState = rememberScrollState()
 

@@ -1,6 +1,6 @@
 // 文件说明：发布/编辑服务「服务声明」弹层：平台默认四条不可删，用户可增删自定义条目（编号自 5 起）。
 
-package com.example.Lulu.ui.components
+package com.example.aiye.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,8 +48,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.Lulu.data.model.ServiceDeclarations
-import com.example.Lulu.ui.theme.DialogTitleTopPadding
+import com.example.aiye.data.model.ServiceDeclarations
+import com.example.aiye.ui.theme.DialogTitleTopPadding
 
 private const val MAX_EXTRA_DECLARATIONS = 30
 

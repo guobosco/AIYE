@@ -1,6 +1,6 @@
 // 文件说明：按用户隔离的 SharedPreferences 或 DataStore 封装。
 
-package com.example.Lulu.util
+package com.example.aiye.util
 
 import android.content.Context
 import android.content.SharedPreferences

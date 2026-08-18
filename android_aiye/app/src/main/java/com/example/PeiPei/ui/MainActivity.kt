@@ -1,6 +1,6 @@
 // 文件说明：主 Activity，设置 Compose 内容与系统栏、深度链接等入口。
 
-package com.example.Lulu.ui
+package com.example.aiye.ui
 
 import android.os.Bundle
 import android.graphics.Color as AndroidColor
@@ -14,9 +14,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.example.Lulu.R
-import com.example.Lulu.service.NotificationService
-import com.example.Lulu.data.local.AppDataStore
+import com.example.aiye.R
+import com.example.aiye.service.NotificationService
+import com.example.aiye.data.local.AppDataStore
 import kotlinx.coroutines.launch
 
 /**
@@ -27,7 +27,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.example.Lulu.ui.theme.LuluTheme
+import com.example.aiye.ui.theme.LuluTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Box
@@ -42,10 +42,10 @@ import kotlinx.coroutines.delay
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.core.view.WindowCompat
 
-import com.example.Lulu.service.PermissionService
-import com.example.Lulu.ui.navigation.AppNavHost
+import com.example.aiye.service.PermissionService
+import com.example.aiye.ui.navigation.AppNavHost
 
-import com.example.Lulu.util.BadgeUtils
+import com.example.aiye.util.BadgeUtils
 
 import kotlinx.coroutines.Dispatchers
 

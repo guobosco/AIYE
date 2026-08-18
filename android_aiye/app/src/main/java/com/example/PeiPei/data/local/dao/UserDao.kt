@@ -1,9 +1,9 @@
 // 文件说明：用户表的 Room DAO，本地用户资料与缓存。
 
-package com.example.Lulu.data.local.dao
+package com.example.aiye.data.local.dao
 
 import androidx.room.*
-import com.example.Lulu.data.model.User
+import com.example.aiye.data.model.User
 import kotlinx.coroutines.flow.Flow
 
 @Dao

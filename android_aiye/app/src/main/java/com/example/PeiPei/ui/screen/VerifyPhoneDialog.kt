@@ -1,6 +1,6 @@
 // 文件说明：手机号验证弹窗（验证码输入等）。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import android.widget.Toast
 import androidx.compose.foundation.layout.*

@@ -1,6 +1,6 @@
 // 文件说明：小型开关样式的 Compose 控件。
 
-package com.example.Lulu.ui.components
+package com.example.aiye.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState

@@ -1,6 +1,6 @@
 // 文件说明：单个标签下的内容或说明详情界面。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -19,9 +19,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.navigation.NavController
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.data.remote.RetrofitClient
-import com.example.Lulu.ui.navigation.Screen
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.data.remote.RetrofitClient
+import com.example.aiye.ui.navigation.Screen
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

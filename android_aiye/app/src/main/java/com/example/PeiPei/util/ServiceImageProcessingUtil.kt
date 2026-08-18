@@ -1,6 +1,6 @@
 // 文件说明：服务配图裁剪、压缩或校验等业务图像处理。
 
-package com.example.Lulu.util
+package com.example.aiye.util
 
 import android.content.Context
 import android.graphics.Bitmap

@@ -18,7 +18,7 @@ description: >-
 
 Implementation uses the theme value **`DialogTitleTopPadding`** (24.dp):
 
-- Kotlin: `import com.example.Lulu.ui.theme.DialogTitleTopPadding`
+- Kotlin: `import com.example.aiye.ui.theme.DialogTitleTopPadding`
 - Source: `app/src/main/java/com/example/PeiPei/ui/theme/DialogTitleInsets.kt`
 
 Do not duplicate raw `24.dp` for this rule; import and reuse `DialogTitleTopPadding`.

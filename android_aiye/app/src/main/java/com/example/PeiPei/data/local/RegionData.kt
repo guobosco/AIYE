@@ -1,6 +1,6 @@
 // 文件说明：地区、城市等地理层级静态数据或加载逻辑。
 
-package com.example.Lulu.data.local
+package com.example.aiye.data.local
 
 object RegionData {
     val provinces = listOf(

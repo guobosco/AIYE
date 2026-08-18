@@ -1,6 +1,6 @@
 // 文件说明：Typography 字体排印主题定义。
 
-package com.example.Lulu.ui.theme
+package com.example.aiye.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle

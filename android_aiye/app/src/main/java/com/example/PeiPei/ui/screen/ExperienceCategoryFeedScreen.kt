@@ -1,6 +1,6 @@
 // 文件说明：体验分类流 — 使用真实体验数据按分类展示。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -46,10 +46,10 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.example.Lulu.R
-import com.example.Lulu.data.model.Experience
-import com.example.Lulu.data.remote.RetrofitClient
-import com.example.Lulu.ui.navigation.Screen
+import com.example.aiye.R
+import com.example.aiye.data.model.Experience
+import com.example.aiye.data.remote.RetrofitClient
+import com.example.aiye.ui.navigation.Screen
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext

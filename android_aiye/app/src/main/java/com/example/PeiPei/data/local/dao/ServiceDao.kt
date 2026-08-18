@@ -1,13 +1,13 @@
 // 文件说明：服务/商品相关表的 Room DAO，本地服务数据访问。
 
-package com.example.Lulu.data.local.dao
+package com.example.aiye.data.local.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
-import com.example.Lulu.data.model.Service
+import com.example.aiye.data.model.Service
 import kotlinx.coroutines.flow.Flow
 
 @Dao

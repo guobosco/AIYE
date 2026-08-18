@@ -37,5 +37,5 @@
 -dontwarn androidx.**
 
 # Keep application classes
--keep class com.example.Lulu.** { *; }
--dontwarn com.example.Lulu.**
+-keep class com.example.aiye.** { *; }
+-dontwarn com.example.aiye.**

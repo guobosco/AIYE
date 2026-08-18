@@ -1,6 +1,6 @@
 // 文件说明：本地模拟/种子数据存储，用于开发或离线演示数据。
 
-package com.example.Lulu.data.local
+package com.example.aiye.data.local
 
 /**
  * 本地内存数据门面。
@@ -8,15 +8,15 @@ package com.example.Lulu.data.local
  */
 
 import android.util.Log
-import com.example.Lulu.data.model.HostCalendarDayClosure
-import com.example.Lulu.data.model.HostServiceBooking
-import com.example.Lulu.data.model.Service
-import com.example.Lulu.data.model.ServiceCategories
-import com.example.Lulu.data.model.ServiceDeclarations
-import com.example.Lulu.data.model.ServicePublishTaxonomy
-import com.example.Lulu.data.model.User
-import com.example.Lulu.data.repository.LuluRepository
-import com.example.Lulu.util.BookingTimeRangesCodec
+import com.example.aiye.data.model.HostCalendarDayClosure
+import com.example.aiye.data.model.HostServiceBooking
+import com.example.aiye.data.model.Service
+import com.example.aiye.data.model.ServiceCategories
+import com.example.aiye.data.model.ServiceDeclarations
+import com.example.aiye.data.model.ServicePublishTaxonomy
+import com.example.aiye.data.model.User
+import com.example.aiye.data.repository.LuluRepository
+import com.example.aiye.util.BookingTimeRangesCodec
 import java.util.UUID
 import org.json.JSONArray
 import org.json.JSONObject

@@ -1,6 +1,6 @@
 // 文件说明：登录界面（手机号、第三方等登录方式）。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import android.content.Context
 import androidx.compose.animation.AnimatedContent
@@ -37,13 +37,13 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.Lulu.R
-import com.example.Lulu.data.model.hasCompletedOnboardingProfile
-import com.example.Lulu.ui.navigation.Screen
-import com.example.Lulu.data.repository.LuluRepository
-import com.example.Lulu.data.model.User
-import com.example.Lulu.ui.components.FeiLingLoadingLabel
-import com.example.Lulu.wechat.WeChatAuthBridge
+import com.example.aiye.R
+import com.example.aiye.data.model.hasCompletedOnboardingProfile
+import com.example.aiye.ui.navigation.Screen
+import com.example.aiye.data.repository.LuluRepository
+import com.example.aiye.data.model.User
+import com.example.aiye.ui.components.FeiLingLoadingLabel
+import com.example.aiye.wechat.WeChatAuthBridge
 import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

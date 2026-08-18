@@ -1,21 +1,21 @@
 // 文件说明：Retrofit 接口声明，定义与后端 REST API 的契约。
 
-package com.example.Lulu.data.remote
+package com.example.aiye.data.remote
 
 /**
  * 远程接口契约文件。
  * 集中定义用户、好友、聊天、服务等后端 API 请求与响应模型。
  */
 
-import com.example.Lulu.data.model.User
-import com.example.Lulu.data.model.ChatMessage
-import com.example.Lulu.data.model.ChatMessageCreateRequest
-import com.example.Lulu.data.model.ChatReadRequest
-import com.example.Lulu.data.model.ChatUploadResponse
-import com.example.Lulu.data.model.ConversationListItem
-import com.example.Lulu.data.model.CreateDirectConversationResponse
-import com.example.Lulu.data.model.Experience
-import com.example.Lulu.data.model.Service
+import com.example.aiye.data.model.User
+import com.example.aiye.data.model.ChatMessage
+import com.example.aiye.data.model.ChatMessageCreateRequest
+import com.example.aiye.data.model.ChatReadRequest
+import com.example.aiye.data.model.ChatUploadResponse
+import com.example.aiye.data.model.ConversationListItem
+import com.example.aiye.data.model.CreateDirectConversationResponse
+import com.example.aiye.data.model.Experience
+import com.example.aiye.data.model.Service
 import retrofit2.http.*
 import okhttp3.MultipartBody
 
@@ -184,7 +184,7 @@ interface ApiService {
     suspend fun markConversationRead(
         @Path("conversationId") conversationId: String,
         @Body body: ChatReadRequest = ChatReadRequest()
-    ): com.example.Lulu.data.model.ChatConversationMember
+    ): com.example.aiye.data.model.ChatConversationMember
 
     // Service endpoints
     @POST("services/")

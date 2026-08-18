@@ -1,4 +1,4 @@
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -50,10 +50,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import com.example.Lulu.data.model.BookedServiceRecord
-import com.example.Lulu.data.model.ViewedServiceRecord
-import com.example.Lulu.data.repository.LuluRepository
-import com.example.Lulu.ui.navigation.Screen
+import com.example.aiye.data.model.BookedServiceRecord
+import com.example.aiye.data.model.ViewedServiceRecord
+import com.example.aiye.data.repository.LuluRepository
+import com.example.aiye.ui.navigation.Screen
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale

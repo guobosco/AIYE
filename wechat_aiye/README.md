@@ -1,6 +1,6 @@
-# wechat_isanya
+# wechat_aiye
 
-iSanya 的微信小程序端，基于 Taro + React + TypeScript 规划。
+aiye 的微信小程序端，基于 Taro + React + TypeScript 规划。
 
 ## 当前范围
 
@@ -12,7 +12,7 @@ iSanya 的微信小程序端，基于 Taro + React + TypeScript 规划。
 ## 本地启动
 
 当前沙箱环境没有 Node，因此本次仅完成项目代码搭建，未执行模板初始化、依赖安装和预览。
-你可以在本机安装 Node.js 18+ 后进入 `wechat_isanya/` 执行：
+你可以在本机安装 Node.js 18+ 后进入 `wechat_aiye/` 执行：
 
 ```bash
 npm install

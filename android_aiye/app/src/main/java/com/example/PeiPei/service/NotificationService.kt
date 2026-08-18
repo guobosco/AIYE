@@ -1,6 +1,6 @@
 // 文件说明：前台或后台通知服务，处理消息提醒与常驻通知。
 
-package com.example.Lulu.service
+package com.example.aiye.service
 
 /**
  * 通知能力封装文件。
@@ -14,8 +14,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import com.example.Lulu.R
-import com.example.Lulu.ui.MainActivity
+import com.example.aiye.R
+import com.example.aiye.ui.MainActivity
 
 /**
  * 通知服务
@@ -51,7 +51,7 @@ object NotificationService {
         
         // 尝试设置应用图标角标 (使用 BadgeUtils 统一处理，支持更多机型)
         try {
-            com.example.Lulu.util.BadgeUtils.setBadgeCount(context, badgeCount)
+            com.example.aiye.util.BadgeUtils.setBadgeCount(context, badgeCount)
         } catch (e: Exception) {
             // 忽略异常
         }

@@ -1,6 +1,6 @@
 // 文件说明：发布服务「价格设置」底部弹层：多档位（价格 + 时长数字与小时/分钟）+ 预付款与退订规则。
 
-package com.example.Lulu.ui.components
+package com.example.aiye.ui.components
 
 import android.view.WindowManager
 import androidx.compose.foundation.BorderStroke
@@ -62,16 +62,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.Lulu.ui.theme.DialogTitleTopPadding
-import com.example.Lulu.ui.util.findComposeDialogWindow
-import com.example.Lulu.util.DURATION_UNIT_HOURS
-import com.example.Lulu.util.DURATION_UNIT_MINUTES
-import com.example.Lulu.util.PublishPriceTierRow
-import com.example.Lulu.util.defaultPublishPriceTierName
-import com.example.Lulu.util.decodePublishPriceTiers
-import com.example.Lulu.util.encodePublishPriceTiers
-import com.example.Lulu.util.normalizeDurationUnit
-import com.example.Lulu.util.publishPriceTiersValidForSubmit
+import com.example.aiye.ui.theme.DialogTitleTopPadding
+import com.example.aiye.ui.util.findComposeDialogWindow
+import com.example.aiye.util.DURATION_UNIT_HOURS
+import com.example.aiye.util.DURATION_UNIT_MINUTES
+import com.example.aiye.util.PublishPriceTierRow
+import com.example.aiye.util.defaultPublishPriceTierName
+import com.example.aiye.util.decodePublishPriceTiers
+import com.example.aiye.util.encodePublishPriceTiers
+import com.example.aiye.util.normalizeDurationUnit
+import com.example.aiye.util.publishPriceTiersValidForSubmit
 import kotlin.math.roundToInt
 
 private const val MAX_TIERS = 8

@@ -1,6 +1,6 @@
 // 文件说明：服务详情页内嵌只读高德地图，展示服务区域多边形（支持缩放与全屏查看）。
 
-package com.example.Lulu.ui.components
+package com.example.aiye.ui.components
 
 import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.clickable
@@ -49,7 +49,7 @@ import com.amap.api.maps.TextureMapView
 import com.amap.api.maps.model.LatLng
 import com.amap.api.maps.model.Polygon
 import com.amap.api.maps.model.PolygonOptions
-import com.example.Lulu.util.ServiceLocationPolygonCodec
+import com.example.aiye.util.ServiceLocationPolygonCodec
 import kotlinx.coroutines.delay
 
 private fun decodeLatLngs(encoded: String): List<LatLng> {

@@ -1,6 +1,6 @@
 // 文件说明：标签的创建、编辑与管理界面。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,8 +27,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.navigation.NavController
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.ui.navigation.Screen
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.ui.navigation.Screen
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import kotlinx.coroutines.delay

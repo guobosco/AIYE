@@ -1,6 +1,6 @@
 // 文件说明：应用导航图与路由注册，串联各业务界面。
 
-package com.example.Lulu.ui.navigation
+package com.example.aiye.ui.navigation
 
 /**
  * 应用导航编排文件。
@@ -16,44 +16,44 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.example.Lulu.ui.screen.MainScreen
-import com.example.Lulu.ui.screen.ServiceDetailScreen
-import com.example.Lulu.ui.screen.ServiceHostProfileScreen
-import com.example.Lulu.ui.screen.UserInfoScreen
-import com.example.Lulu.ui.screen.SearchScreen
+import com.example.aiye.ui.screen.MainScreen
+import com.example.aiye.ui.screen.ServiceDetailScreen
+import com.example.aiye.ui.screen.ServiceHostProfileScreen
+import com.example.aiye.ui.screen.UserInfoScreen
+import com.example.aiye.ui.screen.SearchScreen
 
-import com.example.Lulu.ui.screen.MyProfileEditScreen
-import com.example.Lulu.ui.screen.MyQrCodeScreen
-import com.example.Lulu.ui.screen.ServiceHostEditScreen
-import com.example.Lulu.ui.screen.TagManageScreen
-import com.example.Lulu.ui.screen.TagDetailScreen
-import com.example.Lulu.ui.screen.ScanScreen
+import com.example.aiye.ui.screen.MyProfileEditScreen
+import com.example.aiye.ui.screen.MyQrCodeScreen
+import com.example.aiye.ui.screen.ServiceHostEditScreen
+import com.example.aiye.ui.screen.TagManageScreen
+import com.example.aiye.ui.screen.TagDetailScreen
+import com.example.aiye.ui.screen.ScanScreen
 
-import com.example.Lulu.ui.screen.LoginScreen
-import com.example.Lulu.ui.screen.WeChatBindPhoneScreen
+import com.example.aiye.ui.screen.LoginScreen
+import com.example.aiye.ui.screen.WeChatBindPhoneScreen
 
-import com.example.Lulu.ui.screen.CompleteNameScreen
-import com.example.Lulu.ui.screen.CompleteProfileScreen
-import com.example.Lulu.ui.screen.MessageThreadScreen
-import com.example.Lulu.ui.screen.CreateServiceScreen
+import com.example.aiye.ui.screen.CompleteNameScreen
+import com.example.aiye.ui.screen.CompleteProfileScreen
+import com.example.aiye.ui.screen.MessageThreadScreen
+import com.example.aiye.ui.screen.CreateServiceScreen
 import androidx.compose.runtime.LaunchedEffect
 import android.app.Activity
 import androidx.compose.ui.platform.LocalContext
 
 import android.content.Intent
-import com.example.Lulu.ui.screen.SplashScreen
+import com.example.aiye.ui.screen.SplashScreen
 
-import com.example.Lulu.ui.screen.SystemPermissionScreen
-import com.example.Lulu.ui.screen.ExperienceCategoryFeedScreen
-import com.example.Lulu.ui.screen.ExperienceDetailScreen
-import com.example.Lulu.ui.screen.RealNameVerificationScreen
-import com.example.Lulu.ui.screen.MyIncomeScreen
-import com.example.Lulu.ui.screen.HostServiceOrderDetailScreen
-import com.example.Lulu.ui.screen.MyHostIncomingOrdersScreen
-import com.example.Lulu.ui.screen.MyBookedServicesScreen
-import com.example.Lulu.ui.screen.MyPublishedServicesScreen
-import com.example.Lulu.ui.screen.MyViewedServicesScreen
-import com.example.Lulu.ui.screen.PublishedServiceCalendarScreen
+import com.example.aiye.ui.screen.SystemPermissionScreen
+import com.example.aiye.ui.screen.ExperienceCategoryFeedScreen
+import com.example.aiye.ui.screen.ExperienceDetailScreen
+import com.example.aiye.ui.screen.RealNameVerificationScreen
+import com.example.aiye.ui.screen.MyIncomeScreen
+import com.example.aiye.ui.screen.HostServiceOrderDetailScreen
+import com.example.aiye.ui.screen.MyHostIncomingOrdersScreen
+import com.example.aiye.ui.screen.MyBookedServicesScreen
+import com.example.aiye.ui.screen.MyPublishedServicesScreen
+import com.example.aiye.ui.screen.MyViewedServicesScreen
+import com.example.aiye.ui.screen.PublishedServiceCalendarScreen
 
 /** 登录后主壳内层导航：保留底部 Tab 与首页组合，仅详情压栈。 */
 private object MainShellInnerRoutes {

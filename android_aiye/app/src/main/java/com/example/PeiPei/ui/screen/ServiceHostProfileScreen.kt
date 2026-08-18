@@ -1,6 +1,6 @@
 // 文件说明：查看他人服务主主页的界面。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -95,19 +95,19 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
 import coil.compose.AsyncImage
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.data.remote.RetrofitClient
-import com.example.Lulu.data.model.Service
-import com.example.Lulu.data.model.User
-import com.example.Lulu.data.model.formatWeightKgForDisplay
-import com.example.Lulu.ui.components.AllReviewsSheetContent
-import com.example.Lulu.ui.components.AvatarIdentityShieldOverlay
-import com.example.Lulu.ui.components.FullScreenImageDialog
-import com.example.Lulu.ui.components.ProfileReviewsSection
-import com.example.Lulu.ui.components.hostProfileReviewsFromSummaries
-import com.example.Lulu.ui.navigation.Screen
-import com.example.Lulu.ui.theme.BrandPink
-import com.example.Lulu.ui.viewmodel.ServiceHostProfileViewModel
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.data.remote.RetrofitClient
+import com.example.aiye.data.model.Service
+import com.example.aiye.data.model.User
+import com.example.aiye.data.model.formatWeightKgForDisplay
+import com.example.aiye.ui.components.AllReviewsSheetContent
+import com.example.aiye.ui.components.AvatarIdentityShieldOverlay
+import com.example.aiye.ui.components.FullScreenImageDialog
+import com.example.aiye.ui.components.ProfileReviewsSection
+import com.example.aiye.ui.components.hostProfileReviewsFromSummaries
+import com.example.aiye.ui.navigation.Screen
+import com.example.aiye.ui.theme.BrandPink
+import com.example.aiye.ui.viewmodel.ServiceHostProfileViewModel
 
 /** 主资料详情页 LazyColumn 与底栏按钮相对屏幕左右的留白（与「我的」页卡片边距对齐） */
 private val ServiceHostProfileHorizontalInset = 24.dp

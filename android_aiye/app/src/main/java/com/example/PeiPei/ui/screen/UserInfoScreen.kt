@@ -1,6 +1,6 @@
 // 文件说明：用户资料展示或设置相关信息的界面。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -8,7 +8,7 @@ import android.app.Activity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.example.Lulu.service.PermissionService
+import com.example.aiye.service.PermissionService
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Geocoder
@@ -86,24 +86,24 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.navigation.NavController
-import com.example.Lulu.R
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.data.model.User
-import com.example.Lulu.ui.navigation.Screen
+import com.example.aiye.R
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.data.model.User
+import com.example.aiye.ui.navigation.Screen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import com.example.Lulu.ui.components.EditDialog
-import com.example.Lulu.ui.components.ProfileGroup
-import com.example.Lulu.ui.components.ProfileItem
-import com.example.Lulu.ui.components.RegionPickerDialog
+import com.example.aiye.ui.components.EditDialog
+import com.example.aiye.ui.components.ProfileGroup
+import com.example.aiye.ui.components.ProfileItem
+import com.example.aiye.ui.components.RegionPickerDialog
 
-import com.example.Lulu.data.remote.RetrofitClient
-import com.example.Lulu.ui.components.FullScreenImageDialog
-import com.example.Lulu.ui.components.AvatarIdentityShieldOverlay
-import com.example.Lulu.ui.components.IdentityVerificationCallout
+import com.example.aiye.data.remote.RetrofitClient
+import com.example.aiye.ui.components.FullScreenImageDialog
+import com.example.aiye.ui.components.AvatarIdentityShieldOverlay
+import com.example.aiye.ui.components.IdentityVerificationCallout
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.SideEffect
@@ -833,7 +833,7 @@ fun UserInfoScreen(navController: NavController, showBackButton: Boolean = true)
                         }
                         
                         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
-                            val database = com.example.Lulu.data.local.AppDatabase.getDatabase(context.applicationContext)
+                            val database = com.example.aiye.data.local.AppDatabase.getDatabase(context.applicationContext)
                             database.clearAllTables()
                             
                             listOf("time_ink_prefs", "wage_prefs", "focus_prefs", "menstrual_prefs", "sync_prefs").forEach { name ->

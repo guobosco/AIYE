@@ -1,8 +1,8 @@
 // 文件说明：服务区域「地图多边形」与展示文案在单字段 location 中的编解码（兼容纯文本旧数据）。
 
-package com.example.Lulu.util
+package com.example.aiye.util
 
-import com.example.Lulu.ui.util.compactAdminLocationToCityPrefectureLevel
+import com.example.aiye.ui.util.compactAdminLocationToCityPrefectureLevel
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 

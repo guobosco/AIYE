@@ -1,6 +1,6 @@
 // 文件说明：与权限引导、检测或设置跳转相关的服务逻辑。
 
-package com.example.Lulu.service
+package com.example.aiye.service
 
 import android.content.Context
 import android.content.Intent

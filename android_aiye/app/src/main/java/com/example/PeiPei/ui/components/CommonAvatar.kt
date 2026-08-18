@@ -1,6 +1,6 @@
 // 文件说明：通用头像组件（加载、占位、点击等）。
 
-package com.example.Lulu.ui.components
+package com.example.aiye.ui.components
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -21,7 +21,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
-import com.example.Lulu.data.remote.RetrofitClient
+import com.example.aiye.data.remote.RetrofitClient
 
 @Composable
 fun CommonAvatar(

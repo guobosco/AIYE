@@ -1,6 +1,6 @@
 // 文件说明：首页「体验」Tab — 使用真实后端体验数据按分类展示。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -48,10 +48,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.example.Lulu.R
-import com.example.Lulu.data.model.Experience
-import com.example.Lulu.data.model.ExperienceDetailStep
-import com.example.Lulu.data.remote.RetrofitClient
+import com.example.aiye.R
+import com.example.aiye.data.model.Experience
+import com.example.aiye.data.model.ExperienceDetailStep
+import com.example.aiye.data.remote.RetrofitClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 

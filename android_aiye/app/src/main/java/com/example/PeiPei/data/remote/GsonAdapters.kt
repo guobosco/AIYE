@@ -1,6 +1,6 @@
 // 文件说明：Gson 自定义 TypeAdapter，处理特殊 JSON 序列化规则。
 
-package com.example.Lulu.data.remote
+package com.example.aiye.data.remote
 
 import com.google.gson.TypeAdapter
 import com.google.gson.stream.JsonReader

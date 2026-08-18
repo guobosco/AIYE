@@ -1,6 +1,6 @@
 // 文件说明：评论实体的数据模型。
 
-package com.example.Lulu.data.model
+package com.example.aiye.data.model
 
 import java.util.Date
 

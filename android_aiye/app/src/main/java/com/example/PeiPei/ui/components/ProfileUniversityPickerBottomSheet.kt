@@ -1,6 +1,6 @@
 // 文件说明：曾就读院校选择器——数据来自 assets JSON，搜索 + 分栏 + 虚拟列表，未收录可手动输入。
 
-package com.example.Lulu.ui.components
+package com.example.aiye.ui.components
 
 import android.view.WindowManager
 import androidx.compose.foundation.clickable
@@ -63,9 +63,9 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.example.Lulu.ui.theme.DialogTitleTopPadding
+import com.example.aiye.ui.theme.DialogTitleTopPadding
 import androidx.compose.ui.window.DialogProperties
-import com.example.Lulu.ui.util.findComposeDialogWindow
+import com.example.aiye.ui.util.findComposeDialogWindow
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import kotlinx.coroutines.Dispatchers

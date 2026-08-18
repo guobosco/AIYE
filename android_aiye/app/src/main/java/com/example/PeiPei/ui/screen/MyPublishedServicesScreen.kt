@@ -1,6 +1,6 @@
 // 文件说明：「我发布的」管理页（已发布 / 草稿 / 已取消）。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -67,10 +67,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.data.model.Service
-import com.example.Lulu.data.repository.LuluRepository
-import com.example.Lulu.ui.navigation.Screen
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.data.model.Service
+import com.example.aiye.data.repository.LuluRepository
+import com.example.aiye.ui.navigation.Screen
 import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.flow.flowOf
 

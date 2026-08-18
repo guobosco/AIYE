@@ -1,6 +1,6 @@
 // 文件说明：即时通讯相关的数据模型（消息、会话摘要等）。
 
-package com.example.Lulu.data.model
+package com.example.aiye.data.model
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey

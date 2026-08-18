@@ -1,6 +1,6 @@
 // 文件说明：角标、未读数等展示相关的工具函数。
 
-package com.example.Lulu.util
+package com.example.aiye.util
 
 import android.content.ContentValues
 import android.content.Context
@@ -74,7 +74,7 @@ object BadgeUtils {
             val bundle = Bundle()
             bundle.putString("package", context.packageName)
             // 确保使用正确的主 Activity 类名
-            bundle.putString("class", "com.example.Lulu.ui.MainActivity")
+            bundle.putString("class", "com.example.aiye.ui.MainActivity")
             bundle.putInt("badgenumber", count)
             context.contentResolver.call(
                 Uri.parse("content://com.huawei.android.launcher.settings/badge/"),

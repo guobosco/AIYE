@@ -1,6 +1,6 @@
 // 文件说明：图片加载、缩放、格式等通用图像工具。
 
-package com.example.Lulu.util
+package com.example.aiye.util
 
 import android.content.ContentValues
 import android.content.Context

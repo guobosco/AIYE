@@ -1,6 +1,6 @@
 // 文件说明：圆角、裁剪等形状主题定义。
 
-package com.example.Lulu.ui.theme
+package com.example.aiye.ui.theme
 
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Shapes

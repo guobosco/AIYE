@@ -4,7 +4,7 @@ import prodConfig from './prod';
 
 export default defineConfig(async (merge, { command, mode }) => {
   const baseConfig = {
-    projectName: 'wechat_isanya',
+    projectName: 'wechat_aiye',
     date: '2026-06-11',
     designWidth: 750,
     sourceRoot: 'src',

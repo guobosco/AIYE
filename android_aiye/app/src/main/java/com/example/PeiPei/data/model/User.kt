@@ -1,6 +1,6 @@
 // 文件说明：用户资料、账号等核心用户数据模型。
 
-package com.example.Lulu.data.model
+package com.example.aiye.data.model
 
 /**
  * 用户实体定义文件。

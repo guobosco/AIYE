@@ -1,6 +1,6 @@
 // 文件说明：单会话聊天详情界面。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import android.content.Context
 import android.net.Uri
@@ -76,14 +76,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.data.model.ChatMessage
-import com.example.Lulu.data.model.Service
-import com.example.Lulu.data.model.ServiceCategories
-import com.example.Lulu.data.model.User
-import com.example.Lulu.ui.components.ChatLocationMapPickerOverlay
-import com.example.Lulu.ui.components.CommonAvatar
-import com.example.Lulu.ui.navigation.Screen
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.data.model.ChatMessage
+import com.example.aiye.data.model.Service
+import com.example.aiye.data.model.ServiceCategories
+import com.example.aiye.data.model.User
+import com.example.aiye.ui.components.ChatLocationMapPickerOverlay
+import com.example.aiye.ui.components.CommonAvatar
+import com.example.aiye.ui.navigation.Screen
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -636,7 +636,7 @@ private fun PinnedServiceContextCard(
         }
         val location = service?.location?.trim().orEmpty()
         if (location.isNotEmpty()) {
-            add(com.example.Lulu.util.ServiceLocationPolygonCodec.displayLine(location))
+            add(com.example.aiye.util.ServiceLocationPolygonCodec.displayLine(location))
         }
     }.joinToString(" · ")
 
@@ -1142,7 +1142,7 @@ private fun ServiceSelectorItem(
                     if (cat.isNotBlank()) add(cat)
                     if (service.serviceMode.isNotBlank()) add(service.serviceMode)
                     if (service.location.isNotBlank()) add(
-                        com.example.Lulu.util.ServiceLocationPolygonCodec.displayLine(service.location)
+                        com.example.aiye.util.ServiceLocationPolygonCodec.displayLine(service.location)
                     )
                 }.joinToString(" · ")
                 if (summary.isNotBlank()) {

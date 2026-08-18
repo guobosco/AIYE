@@ -1,6 +1,6 @@
 // 文件说明：用户相关仓库，封装登录、资料等用户数据访问。
 
-package com.example.Lulu.data.repository
+package com.example.aiye.data.repository
 
 /**
  * 用户数据访问仓库文件。
@@ -8,10 +8,10 @@ package com.example.Lulu.data.repository
  */
 
 import android.app.Application
-import com.example.Lulu.data.local.AppDatabase
-import com.example.Lulu.data.model.User
-import com.example.Lulu.data.remote.ApiService
-import com.example.Lulu.data.remote.RetrofitClient
+import com.example.aiye.data.local.AppDatabase
+import com.example.aiye.data.model.User
+import com.example.aiye.data.remote.ApiService
+import com.example.aiye.data.remote.RetrofitClient
 import kotlinx.coroutines.flow.Flow
 import retrofit2.HttpException
 

@@ -1,7 +1,8 @@
 // 文件说明：服务/体验详情页「服务介绍 / 方案选择 / 预定须知」区块（仿预订类 App 的分组行样式）。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
@@ -69,14 +70,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.data.model.HostCalendarDayClosure
-import com.example.Lulu.data.model.Service
-import com.example.Lulu.ui.theme.DialogTitleTopPadding
-import com.example.Lulu.util.BookingTimeRangesCodec
-import com.example.Lulu.util.defaultPublishPriceTierName
-import com.example.Lulu.util.decodePublishPriceTiers
-import com.example.Lulu.util.priceBasisTextForUiDisplay
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.data.model.HostCalendarDayClosure
+import com.example.aiye.data.model.Service
+import com.example.aiye.ui.theme.DialogTitleTopPadding
+import com.example.aiye.util.BookingTimeRangesCodec
+import com.example.aiye.util.defaultPublishPriceTierName
+import com.example.aiye.util.decodePublishPriceTiers
+import com.example.aiye.util.priceBasisTextForUiDisplay
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Calendar

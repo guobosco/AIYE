@@ -1,6 +1,6 @@
 // 文件说明：弹层内主标题与内容上沿的统一间距。
 
-package com.example.Lulu.ui.theme
+package com.example.aiye.ui.theme
 
 import androidx.compose.ui.unit.dp
 

@@ -1,6 +1,6 @@
 // 文件说明：应用主题根 Composable（跟随系统深浅色），组合颜色、字体与形状。
 
-package com.example.Lulu.ui.theme
+package com.example.aiye.ui.theme
 
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme

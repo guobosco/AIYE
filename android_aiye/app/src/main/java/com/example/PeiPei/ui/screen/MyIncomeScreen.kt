@@ -1,6 +1,6 @@
 // 文件说明：「我的收入」概述页（月/年视图、可滑动周期条、明细与对比区块）。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
@@ -75,11 +75,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import com.example.Lulu.data.repository.LuluRepository
+import com.example.aiye.data.repository.LuluRepository
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.collectAsState
-import com.example.Lulu.data.model.Service
+import com.example.aiye.data.model.Service
 import java.time.LocalDate
 import java.util.Locale
 

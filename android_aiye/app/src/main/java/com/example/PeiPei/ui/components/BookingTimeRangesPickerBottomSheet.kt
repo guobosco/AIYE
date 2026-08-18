@@ -1,6 +1,6 @@
 // 文件说明：发布服务——可预约时段多段选择（底部弹层样式与价格/接单等表单一致）。
 
-package com.example.Lulu.ui.components
+package com.example.aiye.ui.components
 
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
@@ -58,9 +58,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.Lulu.ui.theme.DialogTitleTopPadding
-import com.example.Lulu.util.BookingTimeRangesCodec
-import com.example.Lulu.util.BookingTimeSlot
+import com.example.aiye.ui.theme.DialogTitleTopPadding
+import com.example.aiye.util.BookingTimeRangesCodec
+import com.example.aiye.util.BookingTimeSlot
 import kotlin.math.abs
 
 private fun ensureValidEnd(start: String, end: String): String {

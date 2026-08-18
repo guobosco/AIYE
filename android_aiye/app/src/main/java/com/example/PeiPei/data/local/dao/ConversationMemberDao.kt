@@ -1,12 +1,12 @@
 // 文件说明：会话成员表的 Room DAO，群成员与参与者关系。
 
-package com.example.Lulu.data.local.dao
+package com.example.aiye.data.local.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
-import com.example.Lulu.data.model.ChatConversationMember
+import com.example.aiye.data.model.ChatConversationMember
 import kotlinx.coroutines.flow.Flow
 
 @Dao

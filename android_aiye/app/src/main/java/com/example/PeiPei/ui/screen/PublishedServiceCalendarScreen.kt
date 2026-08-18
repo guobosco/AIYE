@@ -1,6 +1,6 @@
 // 文件说明：发布者「预定日历」——按月网格；在开放日期范围内点击某日弹出可订设置，格内展示可订/不可订摘要；超出开放天数显示「未开放预订」并跳转接单时段设置。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -61,14 +61,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.data.model.HostCalendarDayClosure
-import com.example.Lulu.data.model.HostServiceBooking
-import com.example.Lulu.ui.components.CommonAvatar
-import com.example.Lulu.ui.navigation.Screen
-import com.example.Lulu.ui.theme.BrandPink
-import com.example.Lulu.ui.theme.DialogTitleTopPadding
-import com.example.Lulu.util.BookingTimeRangesCodec
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.data.model.HostCalendarDayClosure
+import com.example.aiye.data.model.HostServiceBooking
+import com.example.aiye.ui.components.CommonAvatar
+import com.example.aiye.ui.navigation.Screen
+import com.example.aiye.ui.theme.BrandPink
+import com.example.aiye.ui.theme.DialogTitleTopPadding
+import com.example.aiye.util.BookingTimeRangesCodec
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.collectAsState
 import java.time.DayOfWeek

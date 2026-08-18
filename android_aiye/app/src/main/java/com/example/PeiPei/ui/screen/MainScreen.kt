@@ -1,6 +1,6 @@
 // 文件说明：登录后主框架（底部导航、多 Tab 容器）。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 /**
  * 主页面容器文件。
@@ -48,15 +48,15 @@ import androidx.navigation.NavController
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.flowOf
 import androidx.compose.ui.platform.LocalContext
-import com.example.Lulu.R
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.ui.navigation.Screen
+import com.example.aiye.R
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.ui.navigation.Screen
 
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.zIndex
-import com.example.Lulu.util.BadgeUtils
+import com.example.aiye.util.BadgeUtils
 
 private data class BottomNavItem(
     val label: String,

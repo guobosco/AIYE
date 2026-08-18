@@ -1,6 +1,6 @@
 // 文件说明：他人主页与详情页共用的评价轮播、列表底栏样式（与 ServiceHostProfile 一致）。
 
-package com.example.Lulu.ui.components
+package com.example.aiye.ui.components
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -45,8 +45,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.Lulu.data.remote.RetrofitClient
-import com.example.Lulu.ui.theme.DialogTitleTopPadding
+import com.example.aiye.data.remote.RetrofitClient
+import com.example.aiye.ui.theme.DialogTitleTopPadding
 
 data class HostProfileReviewUi(
     val reviewerName: String,

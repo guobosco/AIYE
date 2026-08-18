@@ -1,6 +1,6 @@
 // 文件说明：Material/Compose 主题色板与语义色定义。
 
-package com.example.Lulu.ui.theme
+package com.example.aiye.ui.theme
 
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme

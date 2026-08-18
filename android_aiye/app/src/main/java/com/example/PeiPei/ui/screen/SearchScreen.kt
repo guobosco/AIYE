@@ -1,6 +1,6 @@
 // 文件说明：全局或业务内搜索界面（本地联系人/服务 + 键盘搜索远程用户）。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import android.app.Application
 import android.content.SharedPreferences
@@ -71,16 +71,16 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.Lulu.R
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.data.model.Service
-import com.example.Lulu.data.model.ServiceCategories
-import com.example.Lulu.data.model.User
-import com.example.Lulu.data.remote.RetrofitClient
-import com.example.Lulu.data.repository.UserRepository
-import com.example.Lulu.ui.navigation.Screen
-import com.example.Lulu.ui.theme.SurfaceWhite
-import com.example.Lulu.util.UserScopedPrefs
+import com.example.aiye.R
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.data.model.Service
+import com.example.aiye.data.model.ServiceCategories
+import com.example.aiye.data.model.User
+import com.example.aiye.data.remote.RetrofitClient
+import com.example.aiye.data.repository.UserRepository
+import com.example.aiye.ui.navigation.Screen
+import com.example.aiye.ui.theme.SurfaceWhite
+import com.example.aiye.util.UserScopedPrefs
 import coil.compose.AsyncImage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -753,7 +753,7 @@ fun ServiceSearchItem(service: Service, onClick: () -> Unit) {
                 ServiceCategories.normalize(service.category).takeIf { it.isNotBlank() },
                 service.priceText.takeIf { it.isNotBlank() },
                 service.serviceMode.takeIf { it.isNotBlank() },
-                com.example.Lulu.util.ServiceLocationPolygonCodec.displayLine(service.location).takeIf { it.isNotBlank() }
+                com.example.aiye.util.ServiceLocationPolygonCodec.displayLine(service.location).takeIf { it.isNotBlank() }
             ).joinToString(" · ")
             Text(
                 text = subtitle.ifBlank { formatter.format(Date(service.createdAt)) },

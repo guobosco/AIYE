@@ -1,4 +1,4 @@
-package com.example.Lulu.ui.util
+package com.example.aiye.ui.util
 
 import androidx.compose.ui.unit.dp
 

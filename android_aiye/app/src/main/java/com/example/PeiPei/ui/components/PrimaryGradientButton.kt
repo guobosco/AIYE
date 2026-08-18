@@ -1,6 +1,6 @@
 // 文件说明：主按钮样式（渐变、圆角等）的可复用组件。
 
-package com.example.Lulu.ui.components
+package com.example.aiye.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,10 +15,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.RowScope
-import com.example.Lulu.ui.theme.ThemeButtonGradientDisabledEnd
-import com.example.Lulu.ui.theme.ThemeButtonGradientDisabledStart
-import com.example.Lulu.ui.theme.ThemeButtonGradientEnd
-import com.example.Lulu.ui.theme.ThemeButtonGradientStart
+import com.example.aiye.ui.theme.ThemeButtonGradientDisabledEnd
+import com.example.aiye.ui.theme.ThemeButtonGradientDisabledStart
+import com.example.aiye.ui.theme.ThemeButtonGradientEnd
+import com.example.aiye.ui.theme.ThemeButtonGradientStart
 
 @Composable
 fun PrimaryGradientButton(

@@ -1,6 +1,6 @@
 // 文件说明：编辑服务主资料或关系的界面。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import android.widget.Toast
 import androidx.compose.ui.focus.FocusRequester
@@ -30,10 +30,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.Lulu.R
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.data.model.User
-import com.example.Lulu.ui.components.CommonAvatar
+import com.example.aiye.R
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.data.model.User
+import com.example.aiye.ui.components.CommonAvatar
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.graphics.Color
 

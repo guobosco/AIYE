@@ -1,6 +1,6 @@
 // 文件说明：引导用户补全个人资料的流程界面。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import android.app.Activity
 import android.content.Context
@@ -33,12 +33,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.data.model.hasCompletedOnboardingProfile
-import com.example.Lulu.data.model.withAvatarIncludedInPhotoWall
-import com.example.Lulu.data.remote.RetrofitClient
-import com.example.Lulu.ui.components.RegionPickerDialog
-import com.example.Lulu.ui.navigation.Screen
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.data.model.hasCompletedOnboardingProfile
+import com.example.aiye.data.model.withAvatarIncludedInPhotoWall
+import com.example.aiye.data.remote.RetrofitClient
+import com.example.aiye.ui.components.RegionPickerDialog
+import com.example.aiye.ui.navigation.Screen
 import com.yalantis.ucrop.UCrop
 import java.io.File
 import kotlinx.coroutines.launch
@@ -110,7 +110,7 @@ fun CompleteProfileScreen(navController: NavController) {
                     val repository = AppDataStore.getRepository()
                     if (repository != null) {
                         Toast.makeText(context, "正在上传头像...", Toast.LENGTH_SHORT).show()
-                        val serverUrl = com.example.Lulu.util.AvatarUploadUtil.processAndUploadAvatar(context, croppedUri, repository)
+                        val serverUrl = com.example.aiye.util.AvatarUploadUtil.processAndUploadAvatar(context, croppedUri, repository)
                         if (serverUrl != null) {
                             val updatedUser = AppDataStore.currentUser.value
                                 .withAvatarIncludedInPhotoWall(serverUrl)

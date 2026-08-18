@@ -1,6 +1,6 @@
 // 文件说明：实名认证引导页（演示身份证 OCR、人脸活体、人证比对流程）。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -51,9 +51,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.ui.components.PrimaryGradientButton
-import com.example.Lulu.ui.theme.SuccessGreen
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.ui.components.PrimaryGradientButton
+import com.example.aiye.ui.theme.SuccessGreen
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 

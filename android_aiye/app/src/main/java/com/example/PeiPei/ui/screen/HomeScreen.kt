@@ -1,6 +1,6 @@
 // 文件说明：应用首页（推荐、入口 Tab、主要信息流等）。
 
-package com.example.Lulu.ui.screen
+package com.example.aiye.ui.screen
 
 import android.app.Activity
 import android.content.Context
@@ -81,20 +81,20 @@ import coil.compose.AsyncImagePainter
 import coil.compose.rememberAsyncImagePainter
 import coil.request.ImageRequest
 import coil.size.Size
-import com.example.Lulu.R
-import com.example.Lulu.data.local.AppDataStore
-import com.example.Lulu.data.model.Service
-import com.example.Lulu.data.model.ServiceCategories
-import com.example.Lulu.data.repository.LuluRepository
-import com.example.Lulu.service.PermissionService
-import com.example.Lulu.ui.components.FeiLingPullRefreshHintIndicator
-import com.example.Lulu.ui.components.FeiLingTopSyncIndicator
-import com.example.Lulu.ui.navigation.Screen
-import com.example.Lulu.ui.theme.*
-import com.example.Lulu.ui.util.PullRefreshTokens
-import com.example.Lulu.ui.util.matchAdminLocation
-import com.example.Lulu.ui.util.resolveWishlistCategoryGroupName
-import com.example.Lulu.util.NetworkMonitor
+import com.example.aiye.R
+import com.example.aiye.data.local.AppDataStore
+import com.example.aiye.data.model.Service
+import com.example.aiye.data.model.ServiceCategories
+import com.example.aiye.data.repository.LuluRepository
+import com.example.aiye.service.PermissionService
+import com.example.aiye.ui.components.FeiLingPullRefreshHintIndicator
+import com.example.aiye.ui.components.FeiLingTopSyncIndicator
+import com.example.aiye.ui.navigation.Screen
+import com.example.aiye.ui.theme.*
+import com.example.aiye.ui.util.PullRefreshTokens
+import com.example.aiye.ui.util.matchAdminLocation
+import com.example.aiye.ui.util.resolveWishlistCategoryGroupName
+import com.example.aiye.util.NetworkMonitor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -1337,9 +1337,9 @@ private fun HomeFeedCoverImage(
     }
 }
 // 辅助扩展函数：将服务数据转换为首页瀑布流卡片模型（creator 地区由上层批量解析后传入，避免每条服务查用户）
-fun com.example.Lulu.data.model.Service.toServiceEvent(creatorRegionFallback: String): ServiceEvent {
+fun com.example.aiye.data.model.Service.toServiceEvent(creatorRegionFallback: String): ServiceEvent {
     val publishCity = extractCityLevelLocation(
-        com.example.Lulu.util.ServiceLocationPolygonCodec.displayLine(this.location),
+        com.example.aiye.util.ServiceLocationPolygonCodec.displayLine(this.location),
         creatorRegionFallback
     )
     val resolvedCover = coverImageUrl.ifBlank {

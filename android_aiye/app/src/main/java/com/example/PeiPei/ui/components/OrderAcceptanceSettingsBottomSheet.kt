@@ -1,6 +1,6 @@
 // 文件说明：发布服务「接单设置」底部弹层：付款后自动接单 / 手动确认后接单。
 
-package com.example.Lulu.ui.components
+package com.example.aiye.ui.components
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -41,7 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.example.Lulu.ui.theme.DialogTitleTopPadding
+import com.example.aiye.ui.theme.DialogTitleTopPadding
 
 /** 列表行与弹窗共用的「自动接单」文案 */
 const val ORDER_ACCEPTANCE_AUTO_LABEL: String = "用户付款后，自动接单"
