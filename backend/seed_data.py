@@ -7,9 +7,28 @@ try:
     from . import models
 except ImportError:
     import models
+try:
+    from .experience_rating import compute_classic_five_point_rating
+except ImportError:
+    from experience_rating import compute_classic_five_point_rating
 
 
 SEED_LOGIN_PASSWORD = "123456"
+MIDDLE_SCHOOL_FAVORITE_SONGS = [
+    "稻香",
+    "平凡之路",
+    "夜曲",
+    "晴天",
+    "七里香",
+    "后来",
+    "遇见",
+    "小幸运",
+    "起风了",
+    "海阔天空",
+]
+DEFAULT_BIRTH_DECADES = ["95后", "90后", "95后", "90后", "00后", "95后"]
+DEFAULT_JOB_TITLES = ["城市向导", "旅行顾问", "体验主理人", "旅拍搭子", "生活方式顾问"]
+DEFAULT_EDUCATIONS = ["旅游管理", "视觉传达", "市场营销", "酒店管理", "形象设计"]
 
 
 def _now_ms() -> int:
@@ -22,6 +41,219 @@ def _static_url(relative_path: str) -> str:
 
 def _hash_seed_password() -> str:
     return bcrypt.hashpw(SEED_LOGIN_PASSWORD.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+
+def _extract_user_index(raw_value: str, fallback: int = 1) -> int:
+    digits = "".join(ch for ch in (raw_value or "") if ch.isdigit())
+    if not digits:
+        return fallback
+    return max(int(digits[-3:]), fallback)
+
+
+def _normalized_avatar_index(index: int) -> int:
+    return ((max(index, 1) - 1) % 20) + 1
+
+
+def _avatar_url(index: int) -> str:
+    return _static_url(f"avatars/avatar_{_normalized_avatar_index(index):02d}.jpg")
+
+
+def _build_profile_image_urls(primary_photo_url: str, index: int) -> list[str]:
+    secondary_index = _normalized_avatar_index(index + 6)
+    secondary = _static_url(f"avatars/avatar_{secondary_index:02d}.jpg")
+    if primary_photo_url == secondary:
+        secondary_index = _normalized_avatar_index(index + 1)
+        secondary = _static_url(f"avatars/avatar_{secondary_index:02d}.jpg")
+    return [primary_photo_url, secondary]
+
+
+def _default_phone_number(index: int) -> str:
+    return f"1390000{max(index, 1):04d}"
+
+
+def _default_birth_decade(index: int) -> str:
+    return DEFAULT_BIRTH_DECADES[(max(index, 1) - 1) % len(DEFAULT_BIRTH_DECADES)]
+
+
+def _default_song(index: int) -> str:
+    return MIDDLE_SCHOOL_FAVORITE_SONGS[(max(index, 1) - 1) % len(MIDDLE_SCHOOL_FAVORITE_SONGS)]
+
+
+def _default_job_title(index: int) -> str:
+    return DEFAULT_JOB_TITLES[(max(index, 1) - 1) % len(DEFAULT_JOB_TITLES)]
+
+
+def _default_education(index: int) -> str:
+    return DEFAULT_EDUCATIONS[(max(index, 1) - 1) % len(DEFAULT_EDUCATIONS)]
+
+
+def _default_email(user_id: str) -> str:
+    safe_user_id = "".join(ch if ch.isalnum() else "_" for ch in (user_id or "").lower()).strip("_")
+    return f"{safe_user_id or 'seed_user'}@lulu.app"
+
+
+def _non_empty_text(value) -> bool:
+    return isinstance(value, str) and value.strip() != ""
+
+
+def _non_empty_list(value) -> bool:
+    return isinstance(value, list) and len(value) > 0
+
+
+def _fallback_city(item) -> str:
+    if _non_empty_text(item.living_city):
+        return item.living_city.strip()
+    if _non_empty_text(item.region):
+        parts = item.region.strip().split()
+        if parts:
+            return parts[-1]
+    return "三亚"
+
+
+def _fallback_country(item, city: str) -> str:
+    if _non_empty_text(item.living_country):
+        return item.living_country.strip()
+    if city == "三亚":
+        return "中国"
+    return "法国"
+
+
+def _fallback_region(item, city: str, country: str) -> str:
+    if _non_empty_text(item.region):
+        return item.region.strip()
+    if country == "中国":
+        return f"海南 {city}"
+    return city
+
+
+def _fallback_languages(item, country: str) -> list[str]:
+    if _non_empty_list(item.spoken_languages):
+        return item.spoken_languages
+    if country == "中国":
+        return ["普通话", "英语"]
+    return ["英语"]
+
+
+def _fallback_tags(item, city: str, index: int) -> list[str]:
+    if _non_empty_list(item.tags):
+        return item.tags
+    job_or_role = item.job_title.strip() if _non_empty_text(item.job_title) else _default_job_title(index)
+    return [job_or_role, city, "好沟通"]
+
+
+def _fallback_review_summaries(item, city: str) -> list[str]:
+    if _non_empty_list(item.review_summaries):
+        return item.review_summaries
+    name = item.name.strip() if _non_empty_text(item.name) else "这位体验官"
+    return [
+        f"{name}沟通顺畅，安排很稳，整个体验过程很省心。",
+        f"在{city}找{name}很靠谱，细节照顾得很到位。",
+    ]
+
+
+def _pick_default_favorites(rows, owner_id: str, count: int, offset: int) -> list[str]:
+    candidates = [row_id for row_id, row_owner_id in rows if row_owner_id != owner_id]
+    if not candidates:
+        candidates = [row_id for row_id, _ in rows]
+    if not candidates:
+        return []
+    return [candidates[(offset + index) % len(candidates)] for index in range(min(count, len(candidates)))]
+
+
+def _is_seed_user(item) -> bool:
+    user_id = (item.id or "").strip().lower()
+    pei_pei_id = (item.pei_pei_id or "").strip().lower()
+    email = (item.email or "").strip().lower()
+    return (
+        user_id.startswith("seed-")
+        or pei_pei_id.startswith("seed")
+        or pei_pei_id.startswith("pp_seed")
+        or email.endswith("@lulu.app")
+    )
+
+
+def _complete_user_record(item, now_ms: int, index_hint: int = 1) -> None:
+    user_index = _extract_user_index(item.id, fallback=index_hint)
+
+    if not _non_empty_text(item.name):
+        item.name = f"用户{user_index:02d}"
+    if not _non_empty_text(item.email):
+        item.email = _default_email(item.id)
+    if not _non_empty_text(item.phone_number):
+        item.phone_number = _default_phone_number(user_index)
+    if not item.hashed_password:
+        item.hashed_password = _hash_seed_password()
+    if not _non_empty_text(item.login_provider):
+        item.login_provider = "password"
+    if not _non_empty_text(item.wechat_unionid):
+        item.wechat_unionid = f"seed_union_{item.id.replace('-', '_')}"
+    if not _non_empty_text(item.wechat_openid):
+        item.wechat_openid = f"seed_open_{item.id.replace('-', '_')}"
+    if not _non_empty_text(item.wechat_platform):
+        item.wechat_platform = "ios" if user_index % 2 else "android"
+    if not item.phone_bound_at and _non_empty_text(item.phone_number):
+        item.phone_bound_at = item.created_at or now_ms
+    if not item.last_login_at:
+        item.last_login_at = item.updated_at or now_ms
+
+    if not _non_empty_text(item.photo_url):
+        item.photo_url = _avatar_url(user_index)
+    if not _non_empty_list(item.profile_image_urls):
+        item.profile_image_urls = _build_profile_image_urls(item.photo_url, user_index)
+    if not _non_empty_text(item.remark_name):
+        item.remark_name = item.name
+
+    city = _fallback_city(item)
+    country = _fallback_country(item, city)
+    region = _fallback_region(item, city, country)
+
+    if not _non_empty_text(item.signature):
+        item.signature = f"你好，我是{item.name}，欢迎来{city}。"
+    if not _non_empty_text(item.memo):
+        item.memo = "偏好提前沟通时间、人数和具体安排。"
+    if not _non_empty_text(item.gender):
+        item.gender = "女" if user_index % 3 else "男"
+    if not _non_empty_text(item.region):
+        item.region = region
+    if not _non_empty_text(item.job_title):
+        item.job_title = _default_job_title(user_index)
+    if not _non_empty_text(item.education):
+        item.education = _default_education(user_index)
+    if not _non_empty_text(item.birth_decade):
+        item.birth_decade = _default_birth_decade(user_index)
+    if not item.height_cm:
+        item.height_cm = 160 + (user_index % 16)
+    if not item.weight_kg:
+        item.weight_kg = float(48 + (user_index % 18))
+    if not _non_empty_text(item.middle_school_favorite_song):
+        item.middle_school_favorite_song = _default_song(user_index)
+    if not _non_empty_list(item.spoken_languages):
+        item.spoken_languages = _fallback_languages(item, country)
+    if not _non_empty_text(item.living_city):
+        item.living_city = city
+    if not _non_empty_text(item.living_country):
+        item.living_country = country
+    if not _non_empty_list(item.tags):
+        item.tags = _fallback_tags(item, city, user_index)
+    if item.favorite_service_ids is None:
+        item.favorite_service_ids = []
+    if item.favorite_experience_ids is None:
+        item.favorite_experience_ids = []
+    if not item.review_count:
+        item.review_count = 32 + user_index * 3
+    if not item.average_rating:
+        item.average_rating = round(4.72 + (user_index % 8) * 0.03, 2)
+    if not item.service_years:
+        item.service_years = 2 + (user_index % 6)
+    if not _non_empty_list(item.review_summaries):
+        item.review_summaries = _fallback_review_summaries(item, city)
+
+    if not _non_empty_text(item.address_detail):
+        item.address_detail = f"{region}核心区域，可提前沟通具体见面点。"
+    if not _non_empty_text(item.address_recipient_name):
+        item.address_recipient_name = item.name
+    if not _non_empty_text(item.address_phone_number):
+        item.address_phone_number = item.phone_number
 
 
 USER_SEEDS = [
@@ -487,164 +719,7 @@ SERVICE_SEEDS = [
 ]
 
 
-EXPERIENCE_SEEDS = [
-    {
-        "id": "seed-experience-01",
-        "host_id": "seed-user-01",
-        "host_name": "阿宁",
-        "title": "三亚湾日落散步局",
-        "description": "轻松看海、聊天和拍照，适合第一次落地三亚的松弛体验。",
-        "cover_image_url": _static_url("experiences/seed-user-01/sanya_experience_001.jpg"),
-        "image_urls": [
-            _static_url("experiences/seed-user-01/sanya_experience_001.jpg"),
-            _static_url("experiences/seed-user-01/sanya_experience_002.jpg"),
-        ],
-        "location": "三亚",
-        "price_text": "168元",
-        "price_basis_text": "每人",
-        "category": "城市漫游",
-        "duration_text": "约2小时",
-        "badge_text": "轻松入门",
-        "tags": ["海边", "拍照", "松弛感"],
-        "detail_steps": [
-            {
-                "title": "第一步 到海边集合破冰",
-                "description": "先在约定点见面，简单确认路线和当天天气，边走边熟悉彼此节奏。",
-                "image_urls": [
-                    _static_url("experiences/seed-user-01/sanya_experience_001.jpg"),
-                ],
-            },
-            {
-                "title": "第二步 沿海边慢走找机位",
-                "description": "挑更舒服的海边位置散步聊天，顺手记录日落前最松弛的状态和光线。",
-                "image_urls": [
-                    _static_url("experiences/seed-user-01/sanya_experience_002.jpg"),
-                ],
-            },
-            {
-                "title": "第三步 收尾补拍和返程建议",
-                "description": "日落后补几张氛围照，也会给你附近吃饭、继续散步或返程的小建议。",
-                "image_urls": [],
-            },
-        ],
-    },
-    {
-        "id": "seed-experience-02",
-        "host_id": "seed-user-02",
-        "host_name": "小岛",
-        "title": "椰林胶片感街拍体验",
-        "description": "边走边拍，适合情侣和闺蜜，帮助快速进入镜头状态。",
-        "cover_image_url": _static_url("experiences/seed-user-02/sanya_experience_008.jpg"),
-        "image_urls": [
-            _static_url("experiences/seed-user-02/sanya_experience_008.jpg"),
-            _static_url("experiences/seed-user-02/sanya_experience_009.jpg"),
-        ],
-        "location": "三亚",
-        "price_text": "199元",
-        "price_basis_text": "每人",
-        "category": "拍照体验",
-        "duration_text": "约90分钟",
-        "badge_text": "热门",
-        "tags": ["旅拍", "情侣", "氛围感"],
-        "detail_steps": [
-            {
-                "title": "第一步 确认风格和穿搭",
-                "description": "先沟通想要的胶片感和人物状态，快速确定更适合的动作、表情与镜头节奏。",
-                "image_urls": [
-                    _static_url("experiences/seed-user-02/sanya_experience_008.jpg"),
-                ],
-            },
-            {
-                "title": "第二步 边走边拍进入状态",
-                "description": "沿椰林和街边路线移动拍摄，用更自然的互动方式帮助你放松，不会僵硬摆拍。",
-                "image_urls": [
-                    _static_url("experiences/seed-user-02/sanya_experience_009.jpg"),
-                ],
-            },
-            {
-                "title": "第三步 现场补镜头收尾",
-                "description": "结束前会补几张特写和氛围镜头，确保成片里既有故事感也有能直接发朋友圈的照片。",
-                "image_urls": [],
-            },
-        ],
-    },
-    {
-        "id": "seed-experience-03",
-        "host_id": "seed-user-03",
-        "host_name": "Mika",
-        "title": "海边微醺歌单共创",
-        "description": "一起听歌、选歌和聊活动氛围，适合小型聚会前热身。",
-        "cover_image_url": _static_url("experiences/seed-user-03/sanya_experience_015.jpg"),
-        "image_urls": [
-            _static_url("experiences/seed-user-03/sanya_experience_015.jpg"),
-            _static_url("experiences/seed-user-03/sanya_experience_016.jpg"),
-        ],
-        "location": "三亚",
-        "price_text": "129元",
-        "price_basis_text": "每人",
-        "category": "派对体验",
-        "duration_text": "约2小时",
-        "badge_text": "夜生活",
-        "tags": ["音乐", "派对", "社交"],
-    },
-    {
-        "id": "seed-experience-04",
-        "host_id": "seed-user-04",
-        "host_name": "Tina",
-        "title": "清晨海边拉伸唤醒",
-        "description": "日出前后进行轻量拉伸和呼吸练习，体验感轻，不卷强度。",
-        "cover_image_url": _static_url("experiences/seed-user-04/sanya_experience_022.jpg"),
-        "image_urls": [
-            _static_url("experiences/seed-user-04/sanya_experience_022.jpg"),
-            _static_url("experiences/seed-user-04/sanya_experience_023.jpg"),
-        ],
-        "location": "三亚",
-        "price_text": "88元",
-        "price_basis_text": "每人",
-        "category": "运动体验",
-        "duration_text": "约1小时",
-        "badge_text": "清晨推荐",
-        "tags": ["日出", "拉伸", "治愈"],
-    },
-    {
-        "id": "seed-experience-05",
-        "host_id": "seed-user-05",
-        "host_name": "Kiki",
-        "title": "海鲜市场挑食材体验",
-        "description": "带你逛市场、挑食材、讲简单做法，适合喜欢本地生活感的人。",
-        "cover_image_url": _static_url("experiences/seed-user-05/sanya_experience_029.jpg"),
-        "image_urls": [
-            _static_url("experiences/seed-user-05/sanya_experience_029.jpg"),
-            _static_url("experiences/seed-user-05/sanya_experience_030.jpg"),
-        ],
-        "location": "三亚",
-        "price_text": "108元",
-        "price_basis_text": "每人",
-        "category": "城市生活",
-        "duration_text": "约2小时",
-        "badge_text": "本地感",
-        "tags": ["逛市场", "美食", "烟火气"],
-    },
-    {
-        "id": "seed-experience-06",
-        "host_id": "seed-user-06",
-        "host_name": "Luna",
-        "title": "度假妆造快速入门",
-        "description": "适合不会化妆的新手，现场演示清透底妆和拍照更上镜的小技巧。",
-        "cover_image_url": _static_url("experiences/seed-user-06/sanya_experience_036.jpg"),
-        "image_urls": [
-            _static_url("experiences/seed-user-06/sanya_experience_036.jpg"),
-            _static_url("experiences/seed-user-06/sanya_experience_037.jpg"),
-        ],
-        "location": "三亚",
-        "price_text": "118元",
-        "price_basis_text": "每人",
-        "category": "技能体验",
-        "duration_text": "约90分钟",
-        "badge_text": "新手友好",
-        "tags": ["妆造", "拍照", "陪练"],
-    },
-]
+EXPERIENCE_SEEDS = []
 
 
 def _upsert_record(db: Session, model_class, record_id: str, payload: dict):
@@ -670,18 +745,21 @@ def _seed_users(db: Session, now_ms: int) -> None:
                 **payload,
                 "favorite_service_ids": [],
                 "favorite_experience_ids": [],
-                "review_count": 0,
-                "average_rating": 0.0,
-                "service_years": 0,
-                "review_summaries": [],
-                "memo": "",
-                "remark_name": "",
-                "height_cm": 0,
-                "weight_kg": 0.0,
+                "review_count": 32 + (index + 1) * 3,
+                "average_rating": round(4.72 + ((index + 1) % 8) * 0.03, 2),
+                "service_years": 2 + ((index + 1) % 6),
+                "review_summaries": [
+                    f"{payload['name']}沟通顺畅，安排很稳，整个体验过程很省心。",
+                    f"在{payload.get('living_city', '三亚')}找{payload['name']}很靠谱，细节照顾得很到位。",
+                ],
+                "memo": "偏好提前沟通时间、人数和具体安排。",
+                "remark_name": payload["name"],
+                "height_cm": 160 + ((index + 1) % 16),
+                "weight_kg": float(48 + ((index + 1) % 18)),
                 "height_weight_private": False,
-                "middle_school_favorite_song": "",
-                "address_detail": "",
-                "address_recipient_name": "",
+                "middle_school_favorite_song": _default_song(index + 1),
+                "address_detail": f"{payload.get('region', '海南 三亚')}核心区域，可提前沟通具体见面点。",
+                "address_recipient_name": payload["name"],
                 "address_phone_number": payload["phone_number"],
                 "id_modification_count": 0,
                 "last_id_modification_year": 0,
@@ -690,8 +768,31 @@ def _seed_users(db: Session, now_ms: int) -> None:
                 "is_synced": True,
             },
         )
-        if not item.hashed_password:
-            item.hashed_password = _hash_seed_password()
+        _complete_user_record(item, now_ms=now_ms, index_hint=index + 1)
+
+
+def _complete_existing_users(db: Session, now_ms: int) -> None:
+    service_rows = (
+        db.query(models.Service.id, models.Service.creator_id)
+        .filter(models.Service.is_deleted == False)
+        .order_by(models.Service.id.asc())
+        .all()
+    )
+    experience_rows = (
+        db.query(models.Experience.id, models.Experience.host_id)
+        .filter(models.Experience.is_deleted == False)
+        .order_by(models.Experience.id.asc())
+        .all()
+    )
+    users = db.query(models.User).order_by(models.User.id.asc()).all()
+    for index, item in enumerate(users, start=1):
+        if not _is_seed_user(item):
+            continue
+        _complete_user_record(item, now_ms=now_ms, index_hint=index)
+        if not _non_empty_list(item.favorite_service_ids):
+            item.favorite_service_ids = _pick_default_favorites(service_rows, item.id, count=3, offset=index - 1)
+        if not _non_empty_list(item.favorite_experience_ids):
+            item.favorite_experience_ids = _pick_default_favorites(experience_rows, item.id, count=2, offset=index)
 
 
 def _seed_services(db: Session, now_ms: int) -> None:
@@ -725,6 +826,22 @@ def _seed_experiences(db: Session, now_ms: int) -> None:
                 "is_synced": True,
             },
         )
+
+
+def _backfill_experience_ratings(db: Session) -> None:
+    host_rows = (
+        db.query(models.User.id, models.User.average_rating, models.User.review_count)
+        .filter(models.User.id.in_(db.query(models.Experience.host_id).distinct()))
+        .all()
+    )
+    host_rating_map = {
+        host_id: compute_classic_five_point_rating(average_rating, review_count)
+        for host_id, average_rating, review_count in host_rows
+    }
+
+    experiences = db.query(models.Experience).all()
+    for item in experiences:
+        item.average_rating = host_rating_map.get(item.host_id, 0.0)
 
 
 def _seed_wishlist_profile(db: Session, now_ms: int) -> None:
@@ -781,5 +898,7 @@ def ensure_seed_data(db: Session) -> None:
     _seed_users(db, now_ms)
     _seed_services(db, now_ms)
     _seed_experiences(db, now_ms)
+    _backfill_experience_ratings(db)
+    _complete_existing_users(db, now_ms)
     _seed_wishlist_profile(db, now_ms)
     db.commit()

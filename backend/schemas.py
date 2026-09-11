@@ -402,6 +402,7 @@ class ExperienceCreate(ExperienceBase):
 class Experience(ExperienceBase):
     id: str
     host_id: str
+    average_rating: float = 0.0
     created_at: int
     updated_at: int
 

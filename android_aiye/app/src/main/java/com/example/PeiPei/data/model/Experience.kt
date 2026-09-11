@@ -30,6 +30,8 @@ data class Experience(
     @SerializedName("badge_text")
     val badgeText: String = "",
     val tags: List<String> = emptyList(),
+    @SerializedName("average_rating")
+    val averageRating: Double = 0.0,
     @SerializedName("host_id")
     val hostId: String = "",
     @SerializedName("host_name")

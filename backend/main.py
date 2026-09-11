@@ -34,6 +34,10 @@ try:
 except ImportError:
     from seed_data import ensure_seed_data
 try:
+    from .experience_rating import compute_experience_rating_for_host
+except ImportError:
+    from experience_rating import compute_experience_rating_for_host
+try:
     from .chat_realtime import ChatRealtimeHub
 except ImportError:
     from chat_realtime import ChatRealtimeHub
@@ -1230,6 +1234,7 @@ def create_experience(
 ):
     ensure_field_matches_current_user(current_user, experience.host_id, "host_id")
     db_item = models.Experience(**experience.model_dump())
+    db_item.average_rating = compute_experience_rating_for_host(db, experience.host_id)
     db.add(db_item)
     try:
         db.commit()
@@ -1261,6 +1266,7 @@ def update_experience(
         if key in {"id", "host_id", "created_at"}:
             continue
         setattr(db_item, key, value)
+    db_item.average_rating = compute_experience_rating_for_host(db, experience.host_id)
     db_item.updated_at = int(time.time() * 1000)
 
     try:

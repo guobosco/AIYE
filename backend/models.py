@@ -186,6 +186,7 @@ class Experience(Base):
     duration_text = Column(String, default="")
     badge_text = Column(String, default="")
     tags = Column(JSON, default=list)
+    average_rating = Column(Float, default=0.0)
     host_id = Column(String, ForeignKey("users.id"), index=True)
     host_name = Column(String, default="")
     created_at = Column(BigInteger, default=0)

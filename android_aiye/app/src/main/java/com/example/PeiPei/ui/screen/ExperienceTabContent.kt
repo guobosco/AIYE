@@ -52,6 +52,8 @@ import com.example.aiye.R
 import com.example.aiye.data.model.Experience
 import com.example.aiye.data.model.ExperienceDetailStep
 import com.example.aiye.data.remote.RetrofitClient
+import com.example.aiye.ui.util.compactAdminLocationToCityPrefectureLevel
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -69,6 +71,7 @@ data class ExperienceItemUi(
     val id: String,
     val title: String,
     val metaLine: String,
+    val averageRating: Double?,
     val priceFromYuan: Int,
     val priceText: String,
     val priceBasisText: String,
@@ -112,6 +115,36 @@ private fun buildExperienceMetaLine(experience: Experience): String {
     return parts.joinToString(" · ").ifBlank { "当地热门体验" }
 }
 
+private fun formatExperienceHomeLocation(raw: String): String {
+    val source = raw.trim()
+    if (source.isEmpty()) return "地点待沟通"
+
+    val normalized = source.replace(Regex("""[\s/|·,，]+"""), "")
+    if (normalized.isEmpty()) return "地点待沟通"
+
+    val compactAdmin = compactAdminLocationToCityPrefectureLevel(normalized)
+    if (compactAdmin != normalized) return compactAdmin
+
+    Regex("""^(.+?(?:省|自治区|特别行政区))(.+?(?:市|自治州|盟)).*$""")
+        .find(normalized)
+        ?.groupValues
+        ?.let { return it[1] + it[2] }
+
+    Regex("""^(北京市|上海市|天津市|重庆市).*$""")
+        .find(normalized)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.let { return it }
+
+    Regex("""^(.+?市).*$""")
+        .find(normalized)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.let { return it }
+
+    return source
+}
+
 private fun extractPriceFromText(priceText: String): Int {
     val match = Regex("(\\d+)").find(priceText)
     return match?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
@@ -144,6 +177,7 @@ fun Experience.toUiModel(): ExperienceItemUi {
         id = id,
         title = title.ifBlank { "未命名体验" },
         metaLine = buildExperienceMetaLine(this),
+        averageRating = averageRating.takeIf { it > 0.0 },
         priceFromYuan = extractPriceFromText(safePriceText),
         priceText = if (safePriceText.isBlank()) "¥ 待定" else safePriceText,
         priceBasisText = priceBasisText.trim(),
@@ -311,6 +345,11 @@ private fun ExperienceCard(
     val corner = 14.dp
     val metaColor = MaterialTheme.colorScheme.onSurfaceVariant
     val boldColor = MaterialTheme.colorScheme.onBackground
+    val homeLocation = formatExperienceHomeLocation(item.location)
+    val homeMeta = item.averageRating
+        ?.takeIf { it > 0.0 }
+        ?.let { rating -> "$homeLocation  ★ ${String.format(Locale.US, "%.2f", rating)}分" }
+        ?: homeLocation
 
     Column(
         modifier = Modifier
@@ -362,35 +401,11 @@ private fun ExperienceCard(
         )
         Spacer(modifier = Modifier.height(4.dp))
         Text(
-            text = item.metaLine,
+            text = homeMeta,
             color = metaColor,
             fontSize = 12.sp,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        Spacer(modifier = Modifier.height(4.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            Text(
-                text = stringResource(R.string.experience_per_guest_prefix),
-                color = metaColor,
-                fontSize = 12.sp,
-            )
-            Text(
-                text = if (item.priceFromYuan > 0) "${stringResource(R.string.experience_yuan_symbol)}${item.priceFromYuan}" else "待定",
-                color = boldColor,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Bold,
-            )
-            if (item.priceFromYuan > 0) {
-                Text(
-                    text = stringResource(R.string.experience_price_from_suffix),
-                    color = metaColor,
-                    fontSize = 12.sp,
-                )
-            }
-        }
     }
 }

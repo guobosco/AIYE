@@ -292,8 +292,8 @@ private fun ServiceEvent.toHomeFeedCardItem(resources: Resources): HomeFeedCardI
 }
 
 enum class HomeDiscoverTab(val label: String) {
-    Discover("服务"),
-    Nearby("体验")
+    Nearby("体验"),
+    Discover("服务")
 }
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, androidx.compose.material.ExperimentalMaterialApi::class)
 @Composable
@@ -354,7 +354,7 @@ fun HomeScreen(
         mutableStateMapOf<String, Boolean>()
     }
     var togglingFavoriteIds by remember { mutableStateOf(setOf<String>()) }
-    var selectedTab by rememberSaveable { mutableStateOf(HomeDiscoverTab.Discover) }
+    var selectedTab by rememberSaveable { mutableStateOf(HomeDiscoverTab.Nearby) }
     var selectedCategoryFilter by rememberSaveable { mutableStateOf(ServiceCategories.FILTER_ALL) }
 
     val initialFeedPageSize = 20

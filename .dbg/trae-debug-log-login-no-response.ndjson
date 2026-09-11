@@ -1,0 +1,4 @@
+{"location": "LoginView.swift:button", "sessionId": "login-no-response", "ts": 1787069325138, "data": {"phoneEmpty": false, "isLoading": false, "passwordEmpty": false, "isRegisterMode": false}, "msg": "[DEBUG] login button tapped", "runId": "pre-fix", "hypothesisId": "A"}
+{"location": "LoginViewModel.swift:login:start", "sessionId": "login-no-response", "ts": 1787069325143, "data": {"phone": "18800000001", "passwordLength": 6}, "msg": "[DEBUG] login flow started", "runId": "pre-fix", "hypothesisId": "B"}
+{"runId": "pre-fix", "hypothesisId": "B", "data": {"accessTokenLength": 111}, "sessionId": "login-no-response", "msg": "[DEBUG] auth token received", "location": "LoginViewModel.swift:login:token", "ts": 1787069325373}
+{"runId": "pre-fix", "hypothesisId": "D", "data": {"accessTokenLength": 111}, "sessionId": "login-no-response", "msg": "[DEBUG] session sign in", "location": "AppSession.swift:signIn", "ts": 1787069325374}
