@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AIYE 管理后台</title>
+    <link rel="stylesheet" href="/static/admin/admin.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">AI</div>
+          <div>
+            <div class="brand-title">AIYE Admin</div>
+            <div class="brand-subtitle">运营、审核、反馈、内容管理</div>
+          </div>
+        </div>
+        <nav class="sidebar-nav">
+          <a href="#overviewSection">概览</a>
+          <a href="#reviewSection">审核中心</a>
+          <a href="#usersSection">用户</a>
+          <a href="#servicesSection">服务</a>
+          <a href="#experiencesSection">体验</a>
+          <a href="#feedbackSection">反馈</a>
+          <a href="#logsSection">操作日志</a>
+        </nav>
+        <div class="sidebar-tip">
+          新发布服务和体验会进入待审核。后台支持批量审核、详情编辑和操作留痕。
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div>
+            <h1>AIYE 后台管理</h1>
+            <p>给运营提供更完整的登录、审核、编辑和追溯能力。</p>
+          </div>
+          <div class="topbar-actions">
+            <div class="session-card">
+              <span class="session-label">当前会话</span>
+              <strong id="currentAdminLabel">未登录</strong>
+              <span id="adminModePill" class="pill">初始化中</span>
+            </div>
+            <button id="openLoginButton" class="secondary-button" type="button">登录</button>
+            <button id="logoutButton" class="secondary-button" type="button">退出登录</button>
+            <button id="refreshAllButton" class="primary-button" type="button">刷新数据</button>
+          </div>
+        </header>
+
+        <section id="overviewSection" class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>概览</h2>
+              <p>快速看注册趋势、审核积压和待处理反馈。</p>
+            </div>
+          </div>
+
+          <div id="overviewMetrics" class="metric-grid"></div>
+
+          <div class="overview-grid">
+            <div class="panel inset-panel">
+              <div class="subhead">
+                <h3>近 14 天注册趋势</h3>
+                <span id="trendSummary" class="subtle-text">载入中...</span>
+              </div>
+              <div id="registrationChart" class="chart-card"></div>
+            </div>
+
+            <div class="panel inset-panel">
+              <div class="subhead">
+                <h3>注册来源分布</h3>
+                <span class="subtle-text">按 login_provider 统计</span>
+              </div>
+              <div id="providerDistribution" class="provider-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="reviewSection" class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>审核中心</h2>
+              <p>支持批量勾选、批量通过、批量驳回和快速查看详情。</p>
+            </div>
+            <div class="toolbar">
+              <button id="reviewRefreshButton" class="secondary-button" type="button">刷新队列</button>
+              <button id="bulkApproveButton" class="secondary-button" type="button">批量通过</button>
+              <button id="bulkRejectButton" class="secondary-button" type="button">批量驳回</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th><input id="reviewSelectAll" type="checkbox" /></th>
+                  <th>类型</th>
+                  <th>内容</th>
+                  <th>发布者</th>
+                  <th>提交时间</th>
+                  <th>审核备注</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="reviewQueueTable"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section id="usersSection" class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>用户管理</h2>
+              <p>按注册来源、认证状态和关键字快速筛选用户。</p>
+            </div>
+            <div class="toolbar">
+              <input id="userSearchInput" type="search" placeholder="搜索昵称 / 用户ID / 手机号" />
+              <select id="userProviderSelect">
+                <option value="all">全部来源</option>
+                <option value="password">密码注册</option>
+                <option value="wechat">微信登录</option>
+              </select>
+              <select id="userVerificationSelect">
+                <option value="all">全部状态</option>
+                <option value="phone_verified">已绑手机</option>
+                <option value="profile_completed">已完善资料</option>
+                <option value="identity_verified">已实名</option>
+                <option value="pending_phone">未绑手机</option>
+                <option value="pending_profile">未完善资料</option>
+              </select>
+              <button id="userSearchButton" class="secondary-button" type="button">查询</button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>用户</th>
+                  <th>来源</th>
+                  <th>认证</th>
+                  <th>发布内容</th>
+                  <th>最后登录</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="usersTable"></tbody>
+            </table>
+          </div>
+
+          <div class="pagination">
+            <span id="usersPaginationText" class="subtle-text"></span>
+            <div class="pagination-actions">
+              <button id="usersPrevButton" class="secondary-button" type="button">上一页</button>
+              <button id="usersNextButton" class="secondary-button" type="button">下一页</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="servicesSection" class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>服务管理</h2>
+              <p>支持排序提权、详情查看和完整编辑。</p>
+            </div>
+            <div class="toolbar">
+              <input id="serviceSearchInput" type="search" placeholder="搜索标题 / 服务ID / 地点" />
+              <select id="serviceStatusSelect">
+                <option value="all">全部状态</option>
+                <option value="prioritized">优先排序</option>
+                <option value="pending_review">待审核</option>
+                <option value="approved">已通过</option>
+                <option value="rejected">已驳回</option>
+                <option value="active">已发布</option>
+                <option value="draft">草稿</option>
+                <option value="deleted">已删除</option>
+                <option value="square">已同步广场</option>
+                <option value="important">重点服务</option>
+              </select>
+              <button id="serviceSearchButton" class="secondary-button" type="button">查询</button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>服务</th>
+                  <th>发布者</th>
+                  <th>审核 / 状态</th>
+                  <th>价格 / 地点</th>
+                  <th>更新时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="servicesTable"></tbody>
+            </table>
+          </div>
+
+          <div class="pagination">
+            <span id="servicesPaginationText" class="subtle-text"></span>
+            <div class="pagination-actions">
+              <button id="servicesPrevButton" class="secondary-button" type="button">上一页</button>
+              <button id="servicesNextButton" class="secondary-button" type="button">下一页</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="experiencesSection" class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>体验管理</h2>
+              <p>支持详情查看、审核处理和内容编辑。</p>
+            </div>
+            <div class="toolbar">
+              <input id="experienceSearchInput" type="search" placeholder="搜索标题 / 体验ID / 地点" />
+              <select id="experienceStatusSelect">
+                <option value="all">全部状态</option>
+                <option value="pending_review">待审核</option>
+                <option value="approved">已通过</option>
+                <option value="rejected">已驳回</option>
+                <option value="active">正常</option>
+                <option value="deleted">已删除</option>
+              </select>
+              <button id="experienceSearchButton" class="secondary-button" type="button">查询</button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>体验</th>
+                  <th>主理人</th>
+                  <th>审核 / 评分</th>
+                  <th>价格 / 地点</th>
+                  <th>更新时间</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="experiencesTable"></tbody>
+            </table>
+          </div>
+
+          <div class="pagination">
+            <span id="experiencesPaginationText" class="subtle-text"></span>
+            <div class="pagination-actions">
+              <button id="experiencesPrevButton" class="secondary-button" type="button">上一页</button>
+              <button id="experiencesNextButton" class="secondary-button" type="button">下一页</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="feedbackSection" class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>意见反馈</h2>
+              <p>统一处理 bug、功能建议和服务类反馈。</p>
+            </div>
+            <div class="toolbar">
+              <input id="feedbackSearchInput" type="search" placeholder="搜索内容 / 用户 / 联系方式" />
+              <select id="feedbackStatusSelect">
+                <option value="all">全部进度</option>
+                <option value="pending">待处理</option>
+                <option value="processing">处理中</option>
+                <option value="closed">已关闭</option>
+              </select>
+              <select id="feedbackCategorySelect">
+                <option value="all">全部分类</option>
+                <option value="bug">Bug</option>
+                <option value="feature">功能建议</option>
+                <option value="service">服务问题</option>
+                <option value="general">其他</option>
+              </select>
+              <button id="feedbackSearchButton" class="secondary-button" type="button">查询</button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>反馈人</th>
+                  <th>分类 / 来源</th>
+                  <th>内容</th>
+                  <th>状态</th>
+                  <th>跟进备注</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody id="feedbackTable"></tbody>
+            </table>
+          </div>
+
+          <div class="pagination">
+            <span id="feedbackPaginationText" class="subtle-text"></span>
+            <div class="pagination-actions">
+              <button id="feedbackPrevButton" class="secondary-button" type="button">上一页</button>
+              <button id="feedbackNextButton" class="secondary-button" type="button">下一页</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="logsSection" class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>操作日志</h2>
+              <p>记录后台关键操作，方便追溯审核、编辑和状态变更。</p>
+            </div>
+            <button id="logsRefreshButton" class="secondary-button" type="button">刷新日志</button>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>时间</th>
+                  <th>操作人</th>
+                  <th>动作</th>
+                  <th>对象</th>
+                  <th>摘要</th>
+                  <th>详情</th>
+                </tr>
+              </thead>
+              <tbody id="logsTable"></tbody>
+            </table>
+          </div>
+
+          <div class="pagination">
+            <span id="logsPaginationText" class="subtle-text"></span>
+            <div class="pagination-actions">
+              <button id="logsPrevButton" class="secondary-button" type="button">上一页</button>
+              <button id="logsNextButton" class="secondary-button" type="button">下一页</button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="loginModal" class="modal-backdrop hidden">
+      <div class="modal-card">
+        <div class="modal-head">
+          <div>
+            <h3>管理员登录</h3>
+            <p class="subtle-text">支持账号密码登录，也兼容访问口令。</p>
+          </div>
+          <button id="closeLoginButton" class="icon-button" type="button">×</button>
+        </div>
+        <form id="loginForm" class="modal-form">
+          <label>
+            <span>账号</span>
+            <input id="loginUsernameInput" type="text" placeholder="管理员账号" />
+          </label>
+          <label>
+            <span>密码</span>
+            <input id="loginPasswordInput" type="password" placeholder="管理员密码" />
+          </label>
+          <label id="tokenLoginField">
+            <span>访问口令</span>
+            <input id="loginTokenInput" type="password" placeholder="后台口令" />
+          </label>
+          <div class="modal-actions">
+            <button id="loginSubmitButton" class="primary-button" type="submit">登录后台</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <aside id="detailDrawer" class="detail-drawer hidden">
+      <div class="drawer-overlay" id="drawerOverlay"></div>
+      <div class="drawer-panel">
+        <div class="drawer-head">
+          <div>
+            <h3 id="detailPanelTitle">详情</h3>
+            <p id="detailPanelSubtitle" class="subtle-text">查看并编辑内容详情</p>
+          </div>
+          <button id="closeDrawerButton" class="icon-button" type="button">×</button>
+        </div>
+
+        <div class="drawer-scroll">
+          <div class="detail-preview">
+            <img id="detailCoverImage" alt="封面图" />
+            <div id="detailImageGallery" class="image-gallery"></div>
+          </div>
+
+          <form id="detailForm" class="detail-form">
+            <input id="detailBizType" type="hidden" />
+            <input id="detailItemId" type="hidden" />
+
+            <label>
+              <span>标题</span>
+              <input id="detailTitleInput" type="text" />
+            </label>
+            <label>
+              <span>分类</span>
+              <input id="detailCategoryInput" type="text" />
+            </label>
+            <label>
+              <span>地点</span>
+              <input id="detailLocationInput" type="text" />
+            </label>
+            <label>
+              <span>价格文案</span>
+              <input id="detailPriceInput" type="text" />
+            </label>
+            <label>
+              <span>封面图 URL</span>
+              <input id="detailCoverInput" type="text" />
+            </label>
+            <label>
+              <span>图片 URL 列表</span>
+              <textarea id="detailImageUrlsInput" rows="4" placeholder="每行一个图片 URL"></textarea>
+            </label>
+            <label>
+              <span>详情描述</span>
+              <textarea id="detailDescriptionInput" rows="8"></textarea>
+            </label>
+
+            <div id="serviceExtraFields" class="toggle-grid">
+              <label>
+                <span>服务优先级</span>
+                <input id="detailPriorityInput" type="number" min="0" step="1" />
+              </label>
+              <label class="checkbox-line">
+                <input id="detailImportantCheckbox" type="checkbox" />
+                <span>设为重点服务</span>
+              </label>
+              <label class="checkbox-line">
+                <input id="detailSquareCheckbox" type="checkbox" />
+                <span>同步到广场</span>
+              </label>
+            </div>
+
+            <div class="modal-actions">
+              <button id="saveDetailButton" class="primary-button" type="submit">保存修改</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </aside>
+
+    <div id="toast" class="toast" hidden></div>
+    <script src="/static/admin/admin.js"></script>
+  </body>
+</html>

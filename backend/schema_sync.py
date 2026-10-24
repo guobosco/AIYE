@@ -32,7 +32,6 @@ DROP_TABLES = {
     "asset_records",
     "countdown_items",
     "database_schema_docs",
-    "feedbacks",
     "friend_requests",
     "friendships",
     "focus_configs",

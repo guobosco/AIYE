@@ -136,6 +136,58 @@ class FavoriteExperiencesResponse(BaseModel):
     experience_ids: List[str] = Field(default_factory=list)
 
 
+class FeedbackCreate(BaseModel):
+    category: str = "general"
+    source: str = "app"
+    content: str
+    contact: str = ""
+
+
+class Feedback(BaseModel):
+    id: str
+    user_id: Optional[str] = None
+    user_name: str = ""
+    phone_number: str = ""
+    source: str = "app"
+    category: str = "general"
+    content: str = ""
+    contact: str = ""
+    status: str = "pending"
+    admin_note: str = ""
+    created_at: int = 0
+    updated_at: int = 0
+    handled_at: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class AdminLoginRequest(BaseModel):
+    username: str = ""
+    password: str = ""
+
+
+class AdminLoginResponse(BaseModel):
+    token: str
+    display_name: str = "管理员"
+    role: str = "super_admin"
+    expires_in_seconds: int = 0
+
+
+class AdminOperationLog(BaseModel):
+    id: str
+    actor: str = "admin"
+    action: str = ""
+    entity_type: str = ""
+    entity_id: str = ""
+    summary: str = ""
+    detail: str = ""
+    created_at: int = 0
+
+    class Config:
+        from_attributes = True
+
+
 class WishlistGroupPayload(BaseModel):
     name: str = ""
     service_ids: List[str] = Field(default_factory=list)
@@ -196,8 +248,13 @@ class ServiceBase(BaseModel):
     service_extra_fee_tags: List[str] = Field(default_factory=list)
     creator: str = ""
     is_important: bool = False
+    sort_priority: int = 0
     is_deleted: bool = False
     is_draft: bool = False
+    review_status: str = "approved"
+    review_note: str = ""
+    review_submitted_at: int = 0
+    reviewed_at: int = 0
     is_synced: bool = True
 
     @field_validator(
@@ -316,6 +373,32 @@ class ServiceBase(BaseModel):
     def normalize_service_bool_fields(cls, value):
         return False if value is None else value
 
+    @field_validator("sort_priority", mode="before")
+    @classmethod
+    def normalize_sort_priority(cls, value):
+        if value is None:
+            return 0
+        try:
+            number = int(value)
+        except (TypeError, ValueError):
+            return 0
+        return max(0, min(number, 9999))
+
+    @field_validator("review_status", "review_note", mode="before")
+    @classmethod
+    def normalize_service_review_fields(cls, value):
+        return "" if value is None else str(value)
+
+    @field_validator("review_submitted_at", "reviewed_at", mode="before")
+    @classmethod
+    def normalize_service_review_timestamps(cls, value):
+        if value is None:
+            return 0
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
+
     @field_validator("is_synced", mode="before")
     @classmethod
     def normalize_is_synced(cls, value):
@@ -369,6 +452,10 @@ class ExperienceBase(BaseModel):
     tags: List[str] = Field(default_factory=list)
     host_name: str = ""
     is_deleted: bool = False
+    review_status: str = "approved"
+    review_note: str = ""
+    review_submitted_at: int = 0
+    reviewed_at: int = 0
     is_synced: bool = True
 
     @field_validator("image_urls", "tags", "detail_steps", mode="before")
@@ -390,6 +477,21 @@ class ExperienceBase(BaseModel):
     @classmethod
     def normalize_experience_text_fields(cls, value):
         return "" if value is None else str(value)
+
+    @field_validator("review_status", "review_note", mode="before")
+    @classmethod
+    def normalize_experience_review_fields(cls, value):
+        return "" if value is None else str(value)
+
+    @field_validator("review_submitted_at", "reviewed_at", mode="before")
+    @classmethod
+    def normalize_experience_review_timestamps(cls, value):
+        if value is None:
+            return 0
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return 0
 
 
 class ExperienceCreate(ExperienceBase):

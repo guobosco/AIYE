@@ -722,6 +722,46 @@ SERVICE_SEEDS = [
 EXPERIENCE_SEEDS = []
 
 
+FEEDBACK_SEEDS = [
+    {
+        "id": "seed-feedback-01",
+        "user_id": "seed-user-01",
+        "user_name": "阿宁",
+        "phone_number": "18800000001",
+        "source": "ios",
+        "category": "bug",
+        "content": "服务发布页在弱网下提交后没有明显进度提示，容易重复点击。",
+        "contact": "18800000001",
+        "status": "pending",
+        "admin_note": "",
+    },
+    {
+        "id": "seed-feedback-02",
+        "user_id": "seed-user-03",
+        "user_name": "Mia",
+        "phone_number": "18800000003",
+        "source": "android",
+        "category": "feature",
+        "content": "希望体验报名后能收到更明显的审核结果通知，也想看到被驳回原因。",
+        "contact": "mia@example.com",
+        "status": "processing",
+        "admin_note": "已纳入后台审核通知需求池。",
+    },
+    {
+        "id": "seed-feedback-03",
+        "user_id": "seed-user-05",
+        "user_name": "Kiki",
+        "phone_number": "18800000005",
+        "source": "app",
+        "category": "service",
+        "content": "体验和服务详情里的地点展示很好，但希望能在后台快速处理内容投诉和下架原因。",
+        "contact": "微信同手机号",
+        "status": "closed",
+        "admin_note": "已上线后台内容审核与反馈跟进。",
+    },
+]
+
+
 def _upsert_record(db: Session, model_class, record_id: str, payload: dict):
     normalized_payload = {key: value for key, value in payload.items() if key != "id"}
     item = db.query(model_class).filter(model_class.id == record_id).first()
@@ -806,6 +846,11 @@ def _seed_services(db: Session, now_ms: int) -> None:
                 **payload,
                 "created_at": created_at,
                 "updated_at": created_at + 1_800_000,
+                "sort_priority": 50 if payload.get("is_important") else 0,
+                "review_status": "draft" if payload.get("is_draft") else "approved",
+                "review_note": "",
+                "review_submitted_at": 0 if payload.get("is_draft") else created_at,
+                "reviewed_at": 0 if payload.get("is_draft") else created_at + 1_800_000,
                 "is_synced": True,
             },
         )
@@ -823,7 +868,54 @@ def _seed_experiences(db: Session, now_ms: int) -> None:
                 "created_at": created_at,
                 "updated_at": created_at + 1_200_000,
                 "is_deleted": False,
+                "review_status": "approved",
+                "review_note": "",
+                "review_submitted_at": created_at,
+                "reviewed_at": created_at + 1_200_000,
                 "is_synced": True,
+            },
+        )
+
+
+def _backfill_review_statuses(db: Session, now_ms: int) -> None:
+    services = db.query(models.Service).all()
+    for item in services:
+        if not getattr(item, "review_status", ""):
+            item.review_status = "draft" if item.is_draft else "approved"
+        if item.is_draft:
+            item.review_status = "draft"
+        if item.review_status != "draft" and not item.review_submitted_at:
+            item.review_submitted_at = item.created_at or now_ms
+        if item.review_status == "approved" and not item.reviewed_at:
+            item.reviewed_at = item.updated_at or item.created_at or now_ms
+        if item.review_note is None:
+            item.review_note = ""
+
+    experiences = db.query(models.Experience).all()
+    for item in experiences:
+        if not getattr(item, "review_status", ""):
+            item.review_status = "approved"
+        if not item.review_submitted_at:
+            item.review_submitted_at = item.created_at or now_ms
+        if item.review_status == "approved" and not item.reviewed_at:
+            item.reviewed_at = item.updated_at or item.created_at or now_ms
+        if item.review_note is None:
+            item.review_note = ""
+
+
+def _seed_feedbacks(db: Session, now_ms: int) -> None:
+    for index, payload in enumerate(FEEDBACK_SEEDS):
+        created_at = now_ms - (index + 1) * 10_800_000
+        handled_at = created_at + 3_600_000 if payload["status"] in {"processing", "closed"} else 0
+        _upsert_record(
+            db,
+            models.Feedback,
+            payload["id"],
+            {
+                **payload,
+                "created_at": created_at,
+                "updated_at": handled_at or created_at,
+                "handled_at": handled_at,
             },
         )
 
@@ -898,7 +990,9 @@ def ensure_seed_data(db: Session) -> None:
     _seed_users(db, now_ms)
     _seed_services(db, now_ms)
     _seed_experiences(db, now_ms)
+    _backfill_review_statuses(db, now_ms)
     _backfill_experience_ratings(db)
     _complete_existing_users(db, now_ms)
     _seed_wishlist_profile(db, now_ms)
+    _seed_feedbacks(db, now_ms)
     db.commit()

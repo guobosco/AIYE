@@ -1,8 +1,10 @@
-from fastapi import FastAPI, Depends, HTTPException, Query, File, UploadFile, Form, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Depends, HTTPException, Query, File, UploadFile, Form, WebSocket, WebSocketDisconnect, Request, Header
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, desc, func
 from typing import Dict, List, Optional, Union
+from pydantic import BaseModel
 import time
 import uuid
 import math
@@ -44,11 +46,14 @@ except ImportError:
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
+ADMIN_STATIC_DIR = os.path.join(STATIC_DIR, "admin")
+ADMIN_INDEX_PATH = os.path.join(ADMIN_STATIC_DIR, "index.html")
 AVATAR_DIR = os.path.join(STATIC_DIR, "avatars")
 CHAT_MEDIA_DIR = os.path.join(STATIC_DIR, "chat")
 SERVICE_MEDIA_DIR = os.path.join(STATIC_DIR, "services")
 EXPERIENCE_MEDIA_DIR = os.path.join(STATIC_DIR, "experiences")
 MAX_UPLOAD_SIZE_BYTES = int(os.getenv("LULU_MAX_UPLOAD_SIZE_MB", "10")) * 1024 * 1024
+MAX_ADMIN_PAGE_SIZE = 100
 MEDIA_BIZ_TO_DIR = {
     "avatar": AVATAR_DIR,
     "service": SERVICE_MEDIA_DIR,
@@ -56,6 +61,11 @@ MEDIA_BIZ_TO_DIR = {
     "chat": CHAT_MEDIA_DIR,
 }
 APP_ENV = os.getenv("LULU_ENV", "development").lower()
+ADMIN_TOKEN = os.getenv("LULU_ADMIN_TOKEN", "").strip()
+ADMIN_USERNAME = os.getenv("LULU_ADMIN_USERNAME", "admin").strip()
+ADMIN_PASSWORD = os.getenv("LULU_ADMIN_PASSWORD", "").strip()
+ADMIN_DISPLAY_NAME = os.getenv("LULU_ADMIN_DISPLAY_NAME", "平台管理员").strip() or "平台管理员"
+ADMIN_SESSION_EXPIRE_HOURS = max(int(os.getenv("LULU_ADMIN_SESSION_EXPIRE_HOURS", "72")), 1)
 WECHAT_APP_ID = os.getenv("LULU_WECHAT_APP_ID", "").strip()
 WECHAT_APP_SECRET = os.getenv("LULU_WECHAT_APP_SECRET", "").strip()
 PHONE_CODE_TTL_SECONDS = int(os.getenv("LULU_PHONE_CODE_TTL_SECONDS", "300"))
@@ -554,9 +564,43 @@ def hydrate_user_profile_metrics(db: Session, user: models.User):
 
 
 def can_view_service(item: models.Service, viewer: Optional[models.User]) -> bool:
-    if item.is_deleted or item.is_draft:
+    if (
+        item.is_deleted
+        or item.is_draft
+        or (item.review_status or "approved") != "approved"
+    ):
         return viewer is not None and viewer.id == item.creator_id
     return True
+
+
+def can_view_experience(item: models.Experience, viewer: Optional[models.User]) -> bool:
+    if item.is_deleted or (item.review_status or "approved") != "approved":
+        return viewer is not None and viewer.id == item.host_id
+    return True
+
+
+def normalize_review_status_for_submit(is_draft: bool) -> str:
+    return "draft" if is_draft else "pending_review"
+
+
+def apply_owner_service_review_state(item: models.Service, previous_status: str = ""):
+    next_status = normalize_review_status_for_submit(bool(item.is_draft))
+    item.review_status = next_status
+    if next_status == "draft":
+        item.review_submitted_at = 0
+        item.reviewed_at = 0
+        item.review_note = ""
+        return
+    item.review_submitted_at = current_millis()
+    item.reviewed_at = 0
+    item.review_note = ""
+
+
+def apply_owner_experience_review_state(item: models.Experience, previous_status: str = ""):
+    item.review_status = "pending_review"
+    item.review_submitted_at = current_millis()
+    item.reviewed_at = 0
+    item.review_note = ""
 
 
 def user_schema_for_viewer(db: Session, orm_user: models.User, viewer_id: str) -> schemas.User:
@@ -661,6 +705,434 @@ def get_or_create_direct_conversation(db: Session, current_user: models.User, pe
     return conversation
 
 
+class AdminUserUpdatePayload(BaseModel):
+    is_phone_verified: Optional[bool] = None
+    is_profile_completed: Optional[bool] = None
+    identity_verified: Optional[bool] = None
+    memo: Optional[str] = None
+
+
+class AdminServiceUpdatePayload(BaseModel):
+    title: Optional[str] = None
+    category: Optional[str] = None
+    location: Optional[str] = None
+    price_text: Optional[str] = None
+    description: Optional[str] = None
+    cover_image_url: Optional[str] = None
+    image_urls: Optional[List[str]] = None
+    is_deleted: Optional[bool] = None
+    is_draft: Optional[bool] = None
+    sync_to_square: Optional[bool] = None
+    is_important: Optional[bool] = None
+    sort_priority: Optional[int] = None
+    review_status: Optional[str] = None
+    review_note: Optional[str] = None
+
+
+class AdminExperienceUpdatePayload(BaseModel):
+    title: Optional[str] = None
+    category: Optional[str] = None
+    location: Optional[str] = None
+    price_text: Optional[str] = None
+    description: Optional[str] = None
+    cover_image_url: Optional[str] = None
+    image_urls: Optional[List[str]] = None
+    is_deleted: Optional[bool] = None
+    review_status: Optional[str] = None
+    review_note: Optional[str] = None
+
+
+class AdminFeedbackUpdatePayload(BaseModel):
+    status: Optional[str] = None
+    admin_note: Optional[str] = None
+
+
+class AdminReviewBatchItem(BaseModel):
+    biz_type: str
+    item_id: str
+
+
+class AdminReviewBatchPayload(BaseModel):
+    review_status: str
+    review_note: Optional[str] = None
+    items: List[AdminReviewBatchItem]
+
+
+def require_admin_access(
+    request: Request,
+    x_admin_token: Optional[str] = Header(None),
+):
+    if not ADMIN_TOKEN and not ADMIN_PASSWORD:
+        return {"actor": ADMIN_DISPLAY_NAME, "role": "super_admin"}
+    candidate = (x_admin_token or request.query_params.get("token") or "").strip()
+    if ADMIN_TOKEN and candidate == ADMIN_TOKEN:
+        return {"actor": ADMIN_DISPLAY_NAME, "role": "super_admin"}
+    try:
+        payload = jwt.decode(candidate, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    if payload.get("scope") != "admin":
+        raise HTTPException(status_code=403, detail="Invalid admin token")
+    return {
+        "actor": str(payload.get("display_name") or ADMIN_DISPLAY_NAME),
+        "role": str(payload.get("role") or "super_admin"),
+    }
+
+
+def create_admin_access_token(display_name: str, role: str = "super_admin") -> str:
+    return create_access_token(
+        {
+            "sub": "admin",
+            "scope": "admin",
+            "display_name": display_name,
+            "role": role,
+        },
+        expires_delta=timedelta(hours=ADMIN_SESSION_EXPIRE_HOURS),
+    )
+
+
+def verify_admin_credentials(username: str, password: str) -> bool:
+    if ADMIN_PASSWORD and username.strip() == ADMIN_USERNAME and password == ADMIN_PASSWORD:
+        return True
+    if ADMIN_TOKEN and password == ADMIN_TOKEN:
+        return True
+    return False
+
+
+def admin_datetime_label(timestamp_ms: int) -> str:
+    if not timestamp_ms:
+        return "-"
+    return datetime.fromtimestamp(timestamp_ms / 1000.0).strftime("%Y-%m-%d %H:%M")
+
+
+def build_admin_day_buckets(days: int) -> List[Dict[str, Union[str, int]]]:
+    today = date.today()
+    buckets: List[Dict[str, Union[str, int]]] = []
+    for offset in range(days - 1, -1, -1):
+        current_day = today - timedelta(days=offset)
+        buckets.append({
+            "date": current_day.isoformat(),
+            "label": current_day.strftime("%m-%d"),
+            "count": 0,
+        })
+    return buckets
+
+
+def build_registration_series(db: Session, days: int = 14) -> List[Dict[str, Union[str, int]]]:
+    safe_days = max(1, min(days, 90))
+    buckets = build_admin_day_buckets(safe_days)
+    index = {item["date"]: item for item in buckets}
+    start_day = date.today() - timedelta(days=safe_days - 1)
+    start_ms = int(datetime.combine(start_day, datetime.min.time()).timestamp() * 1000)
+    rows = db.query(models.User.created_at).filter(models.User.created_at >= start_ms).all()
+    for (created_at,) in rows:
+        if not created_at:
+            continue
+        bucket_key = datetime.fromtimestamp(created_at / 1000.0).date().isoformat()
+        bucket = index.get(bucket_key)
+        if bucket is not None:
+            bucket["count"] = int(bucket["count"]) + 1
+    return buckets
+
+
+def review_status_label(status: str) -> str:
+    mapping = {
+        "draft": "草稿",
+        "pending_review": "待审核",
+        "approved": "已通过",
+        "rejected": "已驳回",
+    }
+    normalized = (status or "").strip() or "approved"
+    return mapping.get(normalized, normalized)
+
+
+def serialize_admin_user(db: Session, user: models.User) -> Dict[str, Union[str, int, bool, float, None]]:
+    hydrated = hydrate_user_profile_metrics(db, user)
+    service_count = db.query(func.count(models.Service.id)).filter(
+        models.Service.creator_id == user.id,
+        models.Service.is_deleted == False
+    ).scalar() or 0
+    experience_count = db.query(func.count(models.Experience.id)).filter(
+        models.Experience.host_id == user.id,
+        models.Experience.is_deleted == False
+    ).scalar() or 0
+    return {
+        "id": user.id,
+        "pei_pei_id": user.pei_pei_id or "",
+        "name": user.name or "",
+        "phone_number": user.phone_number or "",
+        "photo_url": user.photo_url or "",
+        "login_provider": user.login_provider or "password",
+        "is_phone_verified": bool(user.is_phone_verified),
+        "is_profile_completed": bool(user.is_profile_completed),
+        "identity_verified": bool(user.identity_verified),
+        "service_years": hydrated.service_years,
+        "service_count": int(service_count),
+        "experience_count": int(experience_count),
+        "created_at": int(user.created_at or 0),
+        "created_at_label": admin_datetime_label(int(user.created_at or 0)),
+        "last_login_at": int(user.last_login_at or 0),
+        "last_login_at_label": admin_datetime_label(int(user.last_login_at or 0)),
+        "memo": user.memo or "",
+        "region": user.region or "",
+    }
+
+
+def serialize_admin_service(db: Session, item: models.Service) -> Dict[str, Union[str, int, bool]]:
+    owner = db.query(models.User).filter(models.User.id == item.creator_id).first()
+    return {
+        "id": item.id,
+        "title": item.title or "",
+        "description": item.description or "",
+        "category": item.category or "",
+        "price_text": item.price_text or "",
+        "location": item.location or "",
+        "cover_image_url": item.cover_image_url or "",
+        "image_urls": item.image_urls or [],
+        "creator_id": item.creator_id or "",
+        "creator_name": (owner.name if owner else item.creator) or "",
+        "creator_phone_number": owner.phone_number if owner else "",
+        "sync_to_square": bool(item.sync_to_square),
+        "is_important": bool(item.is_important),
+        "sort_priority": int(item.sort_priority or 0),
+        "is_draft": bool(item.is_draft),
+        "is_deleted": bool(item.is_deleted),
+        "review_status": item.review_status or normalize_review_status_for_submit(bool(item.is_draft)),
+        "review_status_label": review_status_label(item.review_status or normalize_review_status_for_submit(bool(item.is_draft))),
+        "review_note": item.review_note or "",
+        "review_submitted_at": int(item.review_submitted_at or 0),
+        "review_submitted_at_label": admin_datetime_label(int(item.review_submitted_at or 0)),
+        "reviewed_at": int(item.reviewed_at or 0),
+        "reviewed_at_label": admin_datetime_label(int(item.reviewed_at or 0)),
+        "created_at": int(item.created_at or 0),
+        "created_at_label": admin_datetime_label(int(item.created_at or 0)),
+        "updated_at": int(item.updated_at or 0),
+        "updated_at_label": admin_datetime_label(int(item.updated_at or 0)),
+    }
+
+
+def serialize_admin_experience(db: Session, item: models.Experience) -> Dict[str, Union[str, int, bool, float]]:
+    host = db.query(models.User).filter(models.User.id == item.host_id).first()
+    return {
+        "id": item.id,
+        "title": item.title or "",
+        "description": item.description or "",
+        "category": item.category or "",
+        "price_text": item.price_text or "",
+        "location": item.location or "",
+        "cover_image_url": item.cover_image_url or "",
+        "image_urls": item.image_urls or [],
+        "host_id": item.host_id or "",
+        "host_name": (host.name if host else item.host_name) or "",
+        "host_phone_number": host.phone_number if host else "",
+        "average_rating": float(item.average_rating or 0.0),
+        "is_deleted": bool(item.is_deleted),
+        "review_status": item.review_status or "approved",
+        "review_status_label": review_status_label(item.review_status or "approved"),
+        "review_note": item.review_note or "",
+        "review_submitted_at": int(item.review_submitted_at or 0),
+        "review_submitted_at_label": admin_datetime_label(int(item.review_submitted_at or 0)),
+        "reviewed_at": int(item.reviewed_at or 0),
+        "reviewed_at_label": admin_datetime_label(int(item.reviewed_at or 0)),
+        "created_at": int(item.created_at or 0),
+        "created_at_label": admin_datetime_label(int(item.created_at or 0)),
+        "updated_at": int(item.updated_at or 0),
+        "updated_at_label": admin_datetime_label(int(item.updated_at or 0)),
+    }
+
+
+def serialize_admin_feedback(item: models.Feedback) -> Dict[str, Union[str, int]]:
+    return {
+        "id": item.id,
+        "user_id": item.user_id or "",
+        "user_name": item.user_name or "",
+        "phone_number": item.phone_number or "",
+        "source": item.source or "app",
+        "category": item.category or "general",
+        "content": item.content or "",
+        "contact": item.contact or "",
+        "status": item.status or "pending",
+        "admin_note": item.admin_note or "",
+        "created_at": int(item.created_at or 0),
+        "created_at_label": admin_datetime_label(int(item.created_at or 0)),
+        "updated_at": int(item.updated_at or 0),
+        "updated_at_label": admin_datetime_label(int(item.updated_at or 0)),
+        "handled_at": int(item.handled_at or 0),
+        "handled_at_label": admin_datetime_label(int(item.handled_at or 0)),
+    }
+
+
+def serialize_admin_operation_log(item: models.AdminOperationLog) -> Dict[str, Union[str, int]]:
+    return {
+        "id": item.id,
+        "actor": item.actor or "admin",
+        "action": item.action or "",
+        "entity_type": item.entity_type or "",
+        "entity_id": item.entity_id or "",
+        "summary": item.summary or "",
+        "detail": item.detail or "",
+        "created_at": int(item.created_at or 0),
+        "created_at_label": admin_datetime_label(int(item.created_at or 0)),
+    }
+
+
+def append_admin_operation_log(
+    db: Session,
+    actor: str,
+    action: str,
+    entity_type: str,
+    entity_id: str,
+    summary: str,
+    detail: str = "",
+):
+    db.add(models.AdminOperationLog(
+        id=str(uuid.uuid4()),
+        actor=actor or ADMIN_DISPLAY_NAME,
+        action=action,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        summary=summary,
+        detail=detail,
+        created_at=current_millis(),
+    ))
+
+
+def build_review_queue(db: Session, limit: int = 20) -> List[Dict[str, Union[str, int, bool, float]]]:
+    queue: List[Dict[str, Union[str, int, bool, float]]] = []
+    services = db.query(models.Service).filter(
+        models.Service.review_status == "pending_review",
+        models.Service.is_deleted == False,
+        models.Service.is_draft == False,
+    ).order_by(desc(models.Service.review_submitted_at), desc(models.Service.updated_at)).limit(limit).all()
+    for item in services:
+        row = serialize_admin_service(db, item)
+        row["biz_type"] = "service"
+        row["owner_name"] = row["creator_name"]
+        queue.append(row)
+    experiences = db.query(models.Experience).filter(
+        models.Experience.review_status == "pending_review",
+        models.Experience.is_deleted == False,
+    ).order_by(desc(models.Experience.review_submitted_at), desc(models.Experience.updated_at)).limit(limit).all()
+    for item in experiences:
+        row = serialize_admin_experience(db, item)
+        row["biz_type"] = "experience"
+        row["owner_name"] = row["host_name"]
+        queue.append(row)
+    queue.sort(key=lambda item: int(item.get("review_submitted_at", 0) or 0), reverse=True)
+    return queue[:limit]
+
+
+def apply_admin_user_update(user: models.User, payload: AdminUserUpdatePayload):
+    if payload.is_phone_verified is not None:
+        user.is_phone_verified = payload.is_phone_verified
+        if payload.is_phone_verified and not user.phone_bound_at:
+            user.phone_bound_at = current_millis()
+    if payload.is_profile_completed is not None:
+        user.is_profile_completed = payload.is_profile_completed
+    if payload.identity_verified is not None:
+        user.identity_verified = payload.identity_verified
+    if payload.memo is not None:
+        user.memo = payload.memo.strip()
+    user.updated_at = current_millis()
+
+
+def apply_admin_service_update(item: models.Service, payload: AdminServiceUpdatePayload):
+    if payload.title is not None:
+        item.title = payload.title.strip()
+    if payload.category is not None:
+        item.category = payload.category.strip()
+    if payload.location is not None:
+        item.location = payload.location.strip()
+    if payload.price_text is not None:
+        item.price_text = payload.price_text.strip()
+    if payload.description is not None:
+        item.description = payload.description.strip()
+    if payload.cover_image_url is not None:
+        item.cover_image_url = payload.cover_image_url.strip()
+    if payload.image_urls is not None:
+        item.image_urls = [value for value in payload.image_urls if value]
+    if payload.is_deleted is not None:
+        item.is_deleted = payload.is_deleted
+    if payload.is_draft is not None:
+        item.is_draft = payload.is_draft
+        if payload.is_draft:
+            item.review_status = "draft"
+            item.review_submitted_at = 0
+            item.reviewed_at = 0
+    if payload.sync_to_square is not None:
+        item.sync_to_square = payload.sync_to_square
+    if payload.is_important is not None:
+        item.is_important = payload.is_important
+    if payload.sort_priority is not None:
+        item.sort_priority = max(0, min(int(payload.sort_priority), 9999))
+    if payload.review_status is not None:
+        normalized = payload.review_status.strip() or item.review_status or "approved"
+        item.review_status = normalized
+        if normalized == "approved":
+            item.is_draft = False
+            item.reviewed_at = current_millis()
+            if payload.review_note is None and not item.review_note:
+                item.review_note = "审核通过"
+        elif normalized == "rejected":
+            item.is_draft = False
+            item.reviewed_at = current_millis()
+        elif normalized == "pending_review":
+            item.is_draft = False
+            item.review_submitted_at = current_millis()
+            item.reviewed_at = 0
+        elif normalized == "draft":
+            item.is_draft = True
+            item.review_submitted_at = 0
+            item.reviewed_at = 0
+    if payload.review_note is not None:
+        item.review_note = payload.review_note.strip()
+    item.updated_at = current_millis()
+
+
+def apply_admin_experience_update(item: models.Experience, payload: AdminExperienceUpdatePayload):
+    if payload.title is not None:
+        item.title = payload.title.strip()
+    if payload.category is not None:
+        item.category = payload.category.strip()
+    if payload.location is not None:
+        item.location = payload.location.strip()
+    if payload.price_text is not None:
+        item.price_text = payload.price_text.strip()
+    if payload.description is not None:
+        item.description = payload.description.strip()
+    if payload.cover_image_url is not None:
+        item.cover_image_url = payload.cover_image_url.strip()
+    if payload.image_urls is not None:
+        item.image_urls = [value for value in payload.image_urls if value]
+    if payload.is_deleted is not None:
+        item.is_deleted = payload.is_deleted
+    if payload.review_status is not None:
+        normalized = payload.review_status.strip() or item.review_status or "approved"
+        item.review_status = normalized
+        if normalized == "approved":
+            item.reviewed_at = current_millis()
+            if payload.review_note is None and not item.review_note:
+                item.review_note = "审核通过"
+        elif normalized == "rejected":
+            item.reviewed_at = current_millis()
+        elif normalized == "pending_review":
+            item.review_submitted_at = current_millis()
+            item.reviewed_at = 0
+    if payload.review_note is not None:
+        item.review_note = payload.review_note.strip()
+    item.updated_at = current_millis()
+
+
+def apply_admin_feedback_update(item: models.Feedback, payload: AdminFeedbackUpdatePayload):
+    if payload.status is not None:
+        item.status = payload.status.strip() or item.status or "pending"
+        if item.status in {"processing", "closed"}:
+            item.handled_at = current_millis()
+    if payload.admin_note is not None:
+        item.admin_note = payload.admin_note.strip()
+    item.updated_at = current_millis()
+
+
 # 创建所有数据库表
 # 如果表已存在，不会重新创建
 models.Base.metadata.create_all(bind=engine)
@@ -671,6 +1143,7 @@ with SessionLocal() as seed_db:
 app = FastAPI()
 
 # --- 静态资源目录配置 ---
+os.makedirs(ADMIN_STATIC_DIR, exist_ok=True)
 os.makedirs(AVATAR_DIR, exist_ok=True)
 os.makedirs(CHAT_MEDIA_DIR, exist_ok=True)
 os.makedirs(SERVICE_MEDIA_DIR, exist_ok=True)
@@ -1080,6 +1553,52 @@ def update_my_wishlist_profile(
         raise HTTPException(status_code=400, detail=str(e))
     return response
 
+
+@app.post("/feedbacks", response_model=schemas.Feedback)
+def create_feedback(
+    payload: schemas.FeedbackCreate,
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_optional_current_user),
+):
+    content = (payload.content or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="Feedback content is required")
+    now = current_millis()
+    item = models.Feedback(
+        id=str(uuid.uuid4()),
+        user_id=current_user.id if current_user else None,
+        user_name=(current_user.name if current_user else "") or "",
+        phone_number=(current_user.phone_number if current_user else "") or "",
+        source=(payload.source or "app").strip() or "app",
+        category=(payload.category or "general").strip() or "general",
+        content=content,
+        contact=(payload.contact or "").strip(),
+        status="pending",
+        admin_note="",
+        created_at=now,
+        updated_at=now,
+        handled_at=0,
+    )
+    db.add(item)
+    try:
+        db.commit()
+        db.refresh(item)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+    return item
+
+
+@app.get("/me/feedbacks", response_model=List[schemas.Feedback])
+def list_my_feedbacks(
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(get_current_user),
+):
+    items = db.query(models.Feedback).filter(
+        models.Feedback.user_id == current_user.id
+    ).order_by(desc(models.Feedback.created_at), desc(models.Feedback.updated_at)).all()
+    return items
+
 @app.post("/service/upload", response_model=schemas.ChatUploadResponse)
 async def upload_service_file(
     file: UploadFile = File(...),
@@ -1111,6 +1630,8 @@ def create_service(
 ):
     ensure_field_matches_current_user(current_user, service.creator_id, "creator_id")
     db_item = models.Service(**service.model_dump())
+    db_item.sort_priority = 0
+    apply_owner_service_review_state(db_item)
     db.add(db_item)
     try:
         db.commit()
@@ -1135,12 +1656,14 @@ def update_service(
         raise HTTPException(status_code=404, detail="Service not found")
     ensure_record_owner(db_item, current_user, "creator_id")
     ensure_field_matches_current_user(current_user, service.creator_id, "creator_id")
+    previous_review_status = db_item.review_status or ""
 
     update_data = service.model_dump(exclude_unset=True)
     for key, value in update_data.items():
-        if key in {"id", "creator_id", "created_at"}:
+        if key in {"id", "creator_id", "created_at", "sort_priority"}:
             continue
         setattr(db_item, key, value)
+    apply_owner_service_review_state(db_item, previous_review_status)
     db_item.updated_at = int(time.time() * 1000)
 
     try:
@@ -1179,12 +1702,18 @@ def list_square_discovery_services(
     """
     query = db.query(models.Service).filter(
         models.Service.is_deleted == False,
-        models.Service.is_draft == False
+        models.Service.is_draft == False,
+        models.Service.review_status == "approved",
     )
     if updated_after is not None:
         query = query.filter(models.Service.updated_at > updated_after)
     items = (
-        query.order_by(desc(models.Service.updated_at), desc(models.Service.created_at))
+        query.order_by(
+            desc(models.Service.sort_priority),
+            desc(models.Service.is_important),
+            desc(models.Service.updated_at),
+            desc(models.Service.created_at)
+        )
         .offset(skip)
         .limit(limit)
         .all()
@@ -1216,6 +1745,7 @@ def delete_service(
         raise HTTPException(status_code=404, detail="Service not found")
     ensure_record_owner(db_item, current_user, "creator_id")
     db_item.is_deleted = True
+    db_item.review_status = "rejected"
     db_item.updated_at = int(time.time() * 1000)
     try:
         db.commit()
@@ -1235,6 +1765,7 @@ def create_experience(
     ensure_field_matches_current_user(current_user, experience.host_id, "host_id")
     db_item = models.Experience(**experience.model_dump())
     db_item.average_rating = compute_experience_rating_for_host(db, experience.host_id)
+    apply_owner_experience_review_state(db_item)
     db.add(db_item)
     try:
         db.commit()
@@ -1260,6 +1791,7 @@ def update_experience(
         raise HTTPException(status_code=404, detail="Experience not found")
     ensure_record_owner(db_item, current_user, "host_id")
     ensure_field_matches_current_user(current_user, experience.host_id, "host_id")
+    previous_review_status = db_item.review_status or ""
 
     update_data = experience.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -1267,6 +1799,7 @@ def update_experience(
             continue
         setattr(db_item, key, value)
     db_item.average_rating = compute_experience_rating_for_host(db, experience.host_id)
+    apply_owner_experience_review_state(db_item, previous_review_status)
     db_item.updated_at = int(time.time() * 1000)
 
     try:
@@ -1300,7 +1833,10 @@ def list_square_discovery_experiences(
     updated_after: Optional[int] = Query(None, ge=0),
     db: Session = Depends(get_db),
 ):
-    query = db.query(models.Experience).filter(models.Experience.is_deleted == False)
+    query = db.query(models.Experience).filter(
+        models.Experience.is_deleted == False,
+        models.Experience.review_status == "approved",
+    )
     if updated_after is not None:
         query = query.filter(models.Experience.updated_at > updated_after)
     return (
@@ -1318,10 +1854,11 @@ def read_experience_detail(
     current_user: Optional[models.User] = Depends(get_optional_current_user)
 ):
     db_item = db.query(models.Experience).filter(
-        models.Experience.id == experience_id,
-        models.Experience.is_deleted == False
+        models.Experience.id == experience_id
     ).first()
     if db_item is None:
+        raise HTTPException(status_code=404, detail="Experience not found")
+    if not can_view_experience(db_item, current_user):
         raise HTTPException(status_code=404, detail="Experience not found")
     return db_item
 
@@ -1337,6 +1874,7 @@ def delete_experience(
         raise HTTPException(status_code=404, detail="Experience not found")
     ensure_record_owner(db_item, current_user, "host_id")
     db_item.is_deleted = True
+    db_item.review_status = "rejected"
     db_item.updated_at = int(time.time() * 1000)
     try:
         db.commit()
@@ -1345,6 +1883,595 @@ def delete_experience(
         db.rollback()
         raise HTTPException(status_code=400, detail=str(e))
     return db_item
+
+
+@app.get("/admin")
+@app.get("/admin/")
+def admin_page():
+    if not os.path.exists(ADMIN_INDEX_PATH):
+        raise HTTPException(status_code=404, detail="Admin page not found")
+    return FileResponse(ADMIN_INDEX_PATH)
+
+
+@app.get("/admin/api/config")
+def admin_config():
+    return {
+        "requires_token": bool(ADMIN_TOKEN),
+        "password_login_enabled": bool(ADMIN_PASSWORD),
+        "default_username": ADMIN_USERNAME,
+        "display_name": ADMIN_DISPLAY_NAME,
+        "session_expire_hours": ADMIN_SESSION_EXPIRE_HOURS,
+    }
+
+
+@app.post("/admin/api/auth/login", response_model=schemas.AdminLoginResponse)
+def admin_login(payload: schemas.AdminLoginRequest):
+    username = (payload.username or "").strip() or ADMIN_USERNAME
+    password = payload.password or ""
+    if not verify_admin_credentials(username, password):
+        raise HTTPException(status_code=401, detail="账号或密码错误")
+    token = create_admin_access_token(ADMIN_DISPLAY_NAME, role="super_admin")
+    return schemas.AdminLoginResponse(
+        token=token,
+        display_name=ADMIN_DISPLAY_NAME,
+        role="super_admin",
+        expires_in_seconds=ADMIN_SESSION_EXPIRE_HOURS * 3600,
+    )
+
+
+@app.get("/admin/api/overview")
+def admin_overview(
+    _: None = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    today = date.today()
+    today_start_ms = int(datetime.combine(today, datetime.min.time()).timestamp() * 1000)
+    seven_days_start_ms = int(datetime.combine(today - timedelta(days=6), datetime.min.time()).timestamp() * 1000)
+
+    total_users = db.query(func.count(models.User.id)).scalar() or 0
+    total_services = db.query(func.count(models.Service.id)).scalar() or 0
+    total_experiences = db.query(func.count(models.Experience.id)).scalar() or 0
+
+    phone_verified_users = db.query(func.count(models.User.id)).filter(models.User.is_phone_verified == True).scalar() or 0
+    profile_completed_users = db.query(func.count(models.User.id)).filter(models.User.is_profile_completed == True).scalar() or 0
+    identity_verified_users = db.query(func.count(models.User.id)).filter(models.User.identity_verified == True).scalar() or 0
+    new_users_today = db.query(func.count(models.User.id)).filter(models.User.created_at >= today_start_ms).scalar() or 0
+    new_users_last_7_days = db.query(func.count(models.User.id)).filter(models.User.created_at >= seven_days_start_ms).scalar() or 0
+
+    active_services = db.query(func.count(models.Service.id)).filter(
+        models.Service.is_deleted == False,
+        models.Service.is_draft == False
+    ).scalar() or 0
+    draft_services = db.query(func.count(models.Service.id)).filter(
+        models.Service.is_deleted == False,
+        models.Service.is_draft == True
+    ).scalar() or 0
+    deleted_services = db.query(func.count(models.Service.id)).filter(models.Service.is_deleted == True).scalar() or 0
+    square_services = db.query(func.count(models.Service.id)).filter(
+        models.Service.is_deleted == False,
+        models.Service.sync_to_square == True
+    ).scalar() or 0
+    prioritized_services = db.query(func.count(models.Service.id)).filter(
+        models.Service.is_deleted == False,
+        models.Service.sort_priority > 0
+    ).scalar() or 0
+    pending_service_reviews = db.query(func.count(models.Service.id)).filter(
+        models.Service.review_status == "pending_review",
+        models.Service.is_deleted == False,
+    ).scalar() or 0
+    approved_services = db.query(func.count(models.Service.id)).filter(
+        models.Service.review_status == "approved",
+        models.Service.is_deleted == False,
+    ).scalar() or 0
+    rejected_services = db.query(func.count(models.Service.id)).filter(
+        models.Service.review_status == "rejected",
+        models.Service.is_deleted == False,
+    ).scalar() or 0
+    active_experiences = db.query(func.count(models.Experience.id)).filter(models.Experience.is_deleted == False).scalar() or 0
+    deleted_experiences = db.query(func.count(models.Experience.id)).filter(models.Experience.is_deleted == True).scalar() or 0
+    pending_experience_reviews = db.query(func.count(models.Experience.id)).filter(
+        models.Experience.review_status == "pending_review",
+        models.Experience.is_deleted == False,
+    ).scalar() or 0
+    approved_experiences = db.query(func.count(models.Experience.id)).filter(
+        models.Experience.review_status == "approved",
+        models.Experience.is_deleted == False,
+    ).scalar() or 0
+    rejected_experiences = db.query(func.count(models.Experience.id)).filter(
+        models.Experience.review_status == "rejected",
+        models.Experience.is_deleted == False,
+    ).scalar() or 0
+    pending_feedbacks = db.query(func.count(models.Feedback.id)).filter(
+        models.Feedback.status == "pending"
+    ).scalar() or 0
+    processing_feedbacks = db.query(func.count(models.Feedback.id)).filter(
+        models.Feedback.status == "processing"
+    ).scalar() or 0
+
+    provider_stats: Dict[str, int] = {}
+    for (provider,) in db.query(models.User.login_provider).all():
+        key = (provider or "password").strip() or "password"
+        provider_stats[key] = provider_stats.get(key, 0) + 1
+
+    recent_users = db.query(models.User).order_by(
+        desc(models.User.created_at),
+        desc(models.User.updated_at)
+    ).limit(8).all()
+
+    def percent(value: int, total: int) -> float:
+        if total <= 0:
+            return 0.0
+        return round((value / total) * 100, 1)
+
+    return {
+        "metrics": {
+            "total_users": int(total_users),
+            "new_users_today": int(new_users_today),
+            "new_users_last_7_days": int(new_users_last_7_days),
+            "phone_verified_users": int(phone_verified_users),
+            "profile_completed_users": int(profile_completed_users),
+            "identity_verified_users": int(identity_verified_users),
+            "phone_verified_rate": percent(int(phone_verified_users), int(total_users)),
+            "profile_completed_rate": percent(int(profile_completed_users), int(total_users)),
+            "identity_verified_rate": percent(int(identity_verified_users), int(total_users)),
+            "total_services": int(total_services),
+            "active_services": int(active_services),
+            "draft_services": int(draft_services),
+            "deleted_services": int(deleted_services),
+            "square_services": int(square_services),
+            "prioritized_services": int(prioritized_services),
+            "pending_service_reviews": int(pending_service_reviews),
+            "approved_services": int(approved_services),
+            "rejected_services": int(rejected_services),
+            "total_experiences": int(total_experiences),
+            "active_experiences": int(active_experiences),
+            "deleted_experiences": int(deleted_experiences),
+            "pending_experience_reviews": int(pending_experience_reviews),
+            "approved_experiences": int(approved_experiences),
+            "rejected_experiences": int(rejected_experiences),
+            "pending_feedbacks": int(pending_feedbacks),
+            "processing_feedbacks": int(processing_feedbacks),
+        },
+        "registration_series": build_registration_series(db, days=14),
+        "provider_distribution": [
+            {"provider": provider, "count": count}
+            for provider, count in sorted(provider_stats.items(), key=lambda item: (-item[1], item[0]))
+        ],
+        "recent_registrations": [serialize_admin_user(db, item) for item in recent_users],
+        "review_queue": build_review_queue(db, limit=8),
+    }
+
+
+@app.get("/admin/api/review-queue")
+def admin_review_queue(
+    limit: int = Query(20, ge=1, le=100),
+    _: None = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    return {
+        "items": build_review_queue(db, limit=limit),
+    }
+
+
+@app.post("/admin/api/reviews/batch")
+def admin_batch_review(
+    payload: AdminReviewBatchPayload,
+    admin_identity: Dict[str, str] = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    review_status = (payload.review_status or "").strip()
+    if review_status not in {"approved", "rejected"}:
+        raise HTTPException(status_code=400, detail="Unsupported review status")
+    items = payload.items or []
+    if not items:
+        raise HTTPException(status_code=400, detail="No review items provided")
+    note = (payload.review_note or "").strip()
+    if review_status == "rejected" and not note:
+        raise HTTPException(status_code=400, detail="Review note is required when rejecting")
+
+    processed: List[Dict[str, str]] = []
+    actor = admin_identity.get("actor") or ADMIN_DISPLAY_NAME
+    for row in items:
+        biz_type = (row.biz_type or "").strip()
+        item_id = (row.item_id or "").strip()
+        if biz_type == "service":
+            item = db.query(models.Service).filter(models.Service.id == item_id).first()
+            if item is None:
+                continue
+            apply_admin_service_update(item, AdminServiceUpdatePayload(
+                review_status=review_status,
+                review_note=note or ("审核通过" if review_status == "approved" else ""),
+            ))
+            append_admin_operation_log(
+                db,
+                actor,
+                f"batch_{review_status}",
+                "service",
+                item.id,
+                f"{actor}批量{'通过' if review_status == 'approved' else '驳回'}了服务《{item.title or item.id}》",
+                note,
+            )
+            processed.append({"biz_type": "service", "item_id": item.id})
+        elif biz_type == "experience":
+            item = db.query(models.Experience).filter(models.Experience.id == item_id).first()
+            if item is None:
+                continue
+            apply_admin_experience_update(item, AdminExperienceUpdatePayload(
+                review_status=review_status,
+                review_note=note or ("审核通过" if review_status == "approved" else ""),
+            ))
+            append_admin_operation_log(
+                db,
+                actor,
+                f"batch_{review_status}",
+                "experience",
+                item.id,
+                f"{actor}批量{'通过' if review_status == 'approved' else '驳回'}了体验《{item.title or item.id}》",
+                note,
+            )
+            processed.append({"biz_type": "experience", "item_id": item.id})
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+    return {
+        "processed_count": len(processed),
+        "items": processed,
+    }
+
+
+@app.get("/admin/api/users")
+def admin_list_users(
+    q: str = Query("", description="按昵称、ID、手机号搜索"),
+    provider: str = Query("all"),
+    verification: str = Query("all"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(12, ge=1, le=MAX_ADMIN_PAGE_SIZE),
+    _: None = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.User)
+    keyword = q.strip()
+    if keyword:
+        like = f"%{keyword}%"
+        query = query.filter(or_(
+            models.User.id.like(like),
+            models.User.pei_pei_id.like(like),
+            models.User.name.like(like),
+            models.User.phone_number.like(like),
+        ))
+    if provider != "all":
+        query = query.filter(models.User.login_provider == provider)
+    if verification == "phone_verified":
+        query = query.filter(models.User.is_phone_verified == True)
+    elif verification == "profile_completed":
+        query = query.filter(models.User.is_profile_completed == True)
+    elif verification == "identity_verified":
+        query = query.filter(models.User.identity_verified == True)
+    elif verification == "pending_phone":
+        query = query.filter(models.User.is_phone_verified == False)
+    elif verification == "pending_profile":
+        query = query.filter(models.User.is_profile_completed == False)
+
+    total = query.count()
+    items = query.order_by(
+        desc(models.User.created_at),
+        desc(models.User.updated_at)
+    ).offset((page - 1) * page_size).limit(page_size).all()
+    return {
+        "items": [serialize_admin_user(db, item) for item in items],
+        "total": int(total),
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@app.patch("/admin/api/users/{user_id}")
+def admin_update_user(
+    user_id: str,
+    payload: AdminUserUpdatePayload,
+    admin_identity: Dict[str, str] = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    apply_admin_user_update(user, payload)
+    actor = admin_identity.get("actor") or ADMIN_DISPLAY_NAME
+    append_admin_operation_log(
+        db,
+        actor,
+        "update_user",
+        "user",
+        user.id,
+        f"{actor}更新了用户 {user.name or user.id} 的后台状态",
+        json.dumps(payload.model_dump(exclude_none=True), ensure_ascii=False),
+    )
+    try:
+        db.commit()
+        db.refresh(user)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+    return serialize_admin_user(db, user)
+
+
+@app.get("/admin/api/services")
+def admin_list_services(
+    q: str = Query("", description="按标题、ID、地点搜索"),
+    status: str = Query("all"),
+    category: str = Query("all"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(12, ge=1, le=MAX_ADMIN_PAGE_SIZE),
+    _: None = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.Service)
+    keyword = q.strip()
+    if keyword:
+        like = f"%{keyword}%"
+        query = query.filter(or_(
+            models.Service.id.like(like),
+            models.Service.title.like(like),
+            models.Service.category.like(like),
+            models.Service.location.like(like),
+        ))
+    if status == "active":
+        query = query.filter(
+            models.Service.is_deleted == False,
+            models.Service.is_draft == False,
+            models.Service.review_status == "approved",
+        )
+    elif status == "draft":
+        query = query.filter(models.Service.is_deleted == False, models.Service.is_draft == True)
+    elif status == "deleted":
+        query = query.filter(models.Service.is_deleted == True)
+    elif status == "square":
+        query = query.filter(models.Service.is_deleted == False, models.Service.sync_to_square == True)
+    elif status == "important":
+        query = query.filter(models.Service.is_deleted == False, models.Service.is_important == True)
+    elif status == "prioritized":
+        query = query.filter(models.Service.is_deleted == False, models.Service.sort_priority > 0)
+    elif status == "pending_review":
+        query = query.filter(models.Service.review_status == "pending_review", models.Service.is_deleted == False)
+    elif status == "approved":
+        query = query.filter(models.Service.review_status == "approved", models.Service.is_deleted == False)
+    elif status == "rejected":
+        query = query.filter(models.Service.review_status == "rejected", models.Service.is_deleted == False)
+    if category != "all":
+        query = query.filter(models.Service.category == category)
+
+    total = query.count()
+    items = query.order_by(
+        desc(models.Service.sort_priority),
+        desc(models.Service.is_important),
+        desc(models.Service.updated_at),
+        desc(models.Service.created_at)
+    ).offset((page - 1) * page_size).limit(page_size).all()
+    return {
+        "items": [serialize_admin_service(db, item) for item in items],
+        "total": int(total),
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@app.get("/admin/api/services/{service_id}")
+def admin_get_service_detail(
+    service_id: str,
+    _: Dict[str, str] = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    item = db.query(models.Service).filter(models.Service.id == service_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Service not found")
+    return serialize_admin_service(db, item)
+
+
+@app.patch("/admin/api/services/{service_id}")
+def admin_update_service(
+    service_id: str,
+    payload: AdminServiceUpdatePayload,
+    admin_identity: Dict[str, str] = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    item = db.query(models.Service).filter(models.Service.id == service_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Service not found")
+    apply_admin_service_update(item, payload)
+    actor = admin_identity.get("actor") or ADMIN_DISPLAY_NAME
+    append_admin_operation_log(
+        db,
+        actor,
+        "update_service",
+        "service",
+        item.id,
+        f"{actor}更新了服务《{item.title or item.id}》",
+        json.dumps(payload.model_dump(exclude_none=True), ensure_ascii=False),
+    )
+    try:
+        db.commit()
+        db.refresh(item)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+    return serialize_admin_service(db, item)
+
+
+@app.get("/admin/api/experiences")
+def admin_list_experiences(
+    q: str = Query("", description="按标题、ID、地点搜索"),
+    status: str = Query("all"),
+    category: str = Query("all"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(12, ge=1, le=MAX_ADMIN_PAGE_SIZE),
+    _: None = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.Experience)
+    keyword = q.strip()
+    if keyword:
+        like = f"%{keyword}%"
+        query = query.filter(or_(
+            models.Experience.id.like(like),
+            models.Experience.title.like(like),
+            models.Experience.category.like(like),
+            models.Experience.location.like(like),
+        ))
+    if status == "active":
+        query = query.filter(models.Experience.is_deleted == False, models.Experience.review_status == "approved")
+    elif status == "deleted":
+        query = query.filter(models.Experience.is_deleted == True)
+    elif status == "pending_review":
+        query = query.filter(models.Experience.review_status == "pending_review", models.Experience.is_deleted == False)
+    elif status == "approved":
+        query = query.filter(models.Experience.review_status == "approved", models.Experience.is_deleted == False)
+    elif status == "rejected":
+        query = query.filter(models.Experience.review_status == "rejected", models.Experience.is_deleted == False)
+    if category != "all":
+        query = query.filter(models.Experience.category == category)
+
+    total = query.count()
+    items = query.order_by(
+        desc(models.Experience.updated_at),
+        desc(models.Experience.created_at)
+    ).offset((page - 1) * page_size).limit(page_size).all()
+    return {
+        "items": [serialize_admin_experience(db, item) for item in items],
+        "total": int(total),
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@app.get("/admin/api/experiences/{experience_id}")
+def admin_get_experience_detail(
+    experience_id: str,
+    _: Dict[str, str] = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    item = db.query(models.Experience).filter(models.Experience.id == experience_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Experience not found")
+    return serialize_admin_experience(db, item)
+
+
+@app.patch("/admin/api/experiences/{experience_id}")
+def admin_update_experience(
+    experience_id: str,
+    payload: AdminExperienceUpdatePayload,
+    admin_identity: Dict[str, str] = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    item = db.query(models.Experience).filter(models.Experience.id == experience_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Experience not found")
+    apply_admin_experience_update(item, payload)
+    actor = admin_identity.get("actor") or ADMIN_DISPLAY_NAME
+    append_admin_operation_log(
+        db,
+        actor,
+        "update_experience",
+        "experience",
+        item.id,
+        f"{actor}更新了体验《{item.title or item.id}》",
+        json.dumps(payload.model_dump(exclude_none=True), ensure_ascii=False),
+    )
+    try:
+        db.commit()
+        db.refresh(item)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+    return serialize_admin_experience(db, item)
+
+
+@app.get("/admin/api/feedbacks")
+def admin_list_feedbacks(
+    q: str = Query("", description="按内容、用户、联系方式搜索"),
+    status: str = Query("all"),
+    category: str = Query("all"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(12, ge=1, le=MAX_ADMIN_PAGE_SIZE),
+    _: None = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.Feedback)
+    keyword = q.strip()
+    if keyword:
+        like = f"%{keyword}%"
+        query = query.filter(or_(
+            models.Feedback.content.like(like),
+            models.Feedback.user_name.like(like),
+            models.Feedback.phone_number.like(like),
+            models.Feedback.contact.like(like),
+            models.Feedback.id.like(like),
+        ))
+    if status != "all":
+        query = query.filter(models.Feedback.status == status)
+    if category != "all":
+        query = query.filter(models.Feedback.category == category)
+
+    total = query.count()
+    items = query.order_by(
+        desc(models.Feedback.created_at),
+        desc(models.Feedback.updated_at)
+    ).offset((page - 1) * page_size).limit(page_size).all()
+    return {
+        "items": [serialize_admin_feedback(item) for item in items],
+        "total": int(total),
+        "page": page,
+        "page_size": page_size,
+    }
+
+
+@app.patch("/admin/api/feedbacks/{feedback_id}")
+def admin_update_feedback(
+    feedback_id: str,
+    payload: AdminFeedbackUpdatePayload,
+    admin_identity: Dict[str, str] = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    item = db.query(models.Feedback).filter(models.Feedback.id == feedback_id).first()
+    if item is None:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+    apply_admin_feedback_update(item, payload)
+    actor = admin_identity.get("actor") or ADMIN_DISPLAY_NAME
+    append_admin_operation_log(
+        db,
+        actor,
+        "update_feedback",
+        "feedback",
+        item.id,
+        f"{actor}更新了反馈 {item.id} 的处理状态",
+        json.dumps(payload.model_dump(exclude_none=True), ensure_ascii=False),
+    )
+    try:
+        db.commit()
+        db.refresh(item)
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+    return serialize_admin_feedback(item)
+
+
+@app.get("/admin/api/operation-logs")
+def admin_list_operation_logs(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(12, ge=1, le=MAX_ADMIN_PAGE_SIZE),
+    _: Dict[str, str] = Depends(require_admin_access),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.AdminOperationLog)
+    total = query.count()
+    items = query.order_by(desc(models.AdminOperationLog.created_at)).offset((page - 1) * page_size).limit(page_size).all()
+    return {
+        "items": [serialize_admin_operation_log(item) for item in items],
+        "total": int(total),
+        "page": page,
+        "page_size": page_size,
+    }
 
 @app.get("/")
 def read_root():

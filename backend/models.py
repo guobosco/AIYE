@@ -155,7 +155,12 @@ class Service(Base):
     service_extra_fee_tags = Column(JSON, default=list)
     participant_ids = Column(JSON, default=list)
     is_important = Column(Boolean, default=False)
+    sort_priority = Column(Integer, default=0, index=True)
     is_draft = Column(Boolean, default=False, nullable=False)
+    review_status = Column(String, default="approved", index=True)
+    review_note = Column(Text, default="")
+    review_submitted_at = Column(BigInteger, default=0)
+    reviewed_at = Column(BigInteger, default=0)
     creator_id = Column(String, ForeignKey("users.id"), index=True)
     creator = Column(String, default="")
     created_at = Column(BigInteger, default=0)
@@ -187,6 +192,10 @@ class Experience(Base):
     badge_text = Column(String, default="")
     tags = Column(JSON, default=list)
     average_rating = Column(Float, default=0.0)
+    review_status = Column(String, default="approved", index=True)
+    review_note = Column(Text, default="")
+    review_submitted_at = Column(BigInteger, default=0)
+    reviewed_at = Column(BigInteger, default=0)
     host_id = Column(String, ForeignKey("users.id"), index=True)
     host_name = Column(String, default="")
     created_at = Column(BigInteger, default=0)
@@ -268,3 +277,34 @@ class ChatMessage(Base):
     created_at = Column(BigInteger, default=0)
     updated_at = Column(BigInteger, default=0)
     is_deleted = Column(Boolean, default=False)
+
+
+class Feedback(Base):
+    __tablename__ = "feedbacks"
+
+    id = Column(String, primary_key=True, index=True)
+    user_id = Column(String, ForeignKey("users.id"), index=True, nullable=True)
+    user_name = Column(String, default="")
+    phone_number = Column(String, default="")
+    source = Column(String, default="app", index=True)
+    category = Column(String, default="general", index=True)
+    content = Column(Text, default="")
+    contact = Column(String, default="")
+    status = Column(String, default="pending", index=True)
+    admin_note = Column(Text, default="")
+    created_at = Column(BigInteger, default=0)
+    updated_at = Column(BigInteger, default=0)
+    handled_at = Column(BigInteger, default=0)
+
+
+class AdminOperationLog(Base):
+    __tablename__ = "admin_operation_logs"
+
+    id = Column(String, primary_key=True, index=True)
+    actor = Column(String, default="admin", index=True)
+    action = Column(String, default="", index=True)
+    entity_type = Column(String, default="", index=True)
+    entity_id = Column(String, default="", index=True)
+    summary = Column(String, default="")
+    detail = Column(Text, default="")
+    created_at = Column(BigInteger, default=0, index=True)
