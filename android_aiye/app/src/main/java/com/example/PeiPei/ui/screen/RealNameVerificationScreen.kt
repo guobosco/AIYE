@@ -63,12 +63,6 @@ private val ButtonShape = RoundedCornerShape(26.dp)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RealNameVerificationScreen(navController: NavController) {
-    val scope = rememberCoroutineScope()
-    var step by remember { mutableIntStateOf(0) }
-    var ocrDone by remember { mutableStateOf(false) }
-    var livenessDone by remember { mutableStateOf(false) }
-    var comparing by remember { mutableStateOf(false) }
-    var matchOk by remember { mutableStateOf(false) }
     val user by AppDataStore.currentUser.collectAsState()
     val scheme = MaterialTheme.colorScheme
 
@@ -109,67 +103,12 @@ fun RealNameVerificationScreen(navController: NavController) {
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             Text(
-                text = "为保障平台安全，请完成身份证识别、人脸活体检测与人证一致性比对。以下为演示流程，正式环境将接入实人认证服务。",
+                text = if (user.identityVerified) "已实名认证" else "实名认证服务暂未开放。",
                 style = MaterialTheme.typography.bodyMedium,
                 color = scheme.onSurfaceVariant,
                 lineHeight = 22.sp
             )
 
-            when (step) {
-                0 -> StepIntroCard(onNext = { step = 1 })
-                1 -> StepCard(
-                    stepIndex = 1,
-                    title = "身份证人像面 OCR",
-                    subtitle = "请确保证件边框完整、文字清晰。演示中点击下方按钮即可模拟识别成功。",
-                    icon = Icons.Default.CameraAlt,
-                    done = ocrDone,
-                    primaryLabel = if (ocrDone) "已识别" else "上传并识别身份证（演示）",
-                    onPrimary = {
-                        scope.launch {
-                            delay(600)
-                            ocrDone = true
-                        }
-                    },
-                    enabled = !ocrDone,
-                    onNext = { if (ocrDone) step = 2 }
-                )
-                2 -> StepCard(
-                    stepIndex = 2,
-                    title = "人脸活体检测",
-                    subtitle = "请正对屏幕完成眨眼等动作。演示中点击下方按钮模拟活体通过。",
-                    icon = Icons.Default.Face,
-                    done = livenessDone,
-                    primaryLabel = if (livenessDone) "活体检测已通过" else "开始人脸活体检测（演示）",
-                    onPrimary = {
-                        scope.launch {
-                            delay(800)
-                            livenessDone = true
-                        }
-                    },
-                    enabled = !livenessDone,
-                    onNext = { if (livenessDone) step = 3 }
-                )
-                else -> StepMatchCard(
-                    comparing = comparing,
-                    matchOk = matchOk,
-                    onCompare = {
-                        scope.launch {
-                            comparing = true
-                            delay(1200)
-                            comparing = false
-                            matchOk = true
-                        }
-                    },
-                    onFinish = {
-                        if (user.id.isNotEmpty()) {
-                            AppDataStore.updateCurrentUser(
-                                user.copy(identityVerified = true, updatedAt = System.currentTimeMillis())
-                            )
-                        }
-                        navController.popBackStack()
-                    }
-                )
-            }
         }
     }
 }

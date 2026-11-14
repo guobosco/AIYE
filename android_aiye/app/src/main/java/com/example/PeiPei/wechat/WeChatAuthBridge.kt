@@ -2,7 +2,6 @@ package com.example.aiye.wechat
 
 import android.content.Intent
 import com.example.aiye.BuildConfig
-import java.util.UUID
 
 data class WeChatAuthPayload(
     val code: String,
@@ -10,16 +9,12 @@ data class WeChatAuthPayload(
 )
 
 /**
- * 当前仓库先提供可联调的微信授权桥接层：
- * - 未配置微信开放平台参数时，返回 debug code，直接走后端 mock/调试链路
- * - 已配置参数后，可在这里替换为真实 OpenSDK 调起逻辑
+ * OpenSDK 接入前明确返回不可用，不生成模拟微信身份。
  */
 object WeChatAuthBridge {
     fun requestAuthorization(): Result<WeChatAuthPayload> {
-        val state = UUID.randomUUID().toString().replace("-", "")
         if (BuildConfig.WECHAT_APP_ID.isBlank()) {
-            val debugCode = "debug_wechat_android_$state"
-            return Result.success(WeChatAuthPayload(code = debugCode, state = state))
+            return Result.failure(IllegalStateException("微信登录尚未配置，请使用手机号登录。"))
         }
         return Result.failure(
             IllegalStateException("已填写微信配置，但当前工程尚未接入 Android OpenSDK。")

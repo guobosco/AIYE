@@ -12,6 +12,7 @@ import json
 import hashlib
 import random
 import threading
+import asyncio
 import bcrypt # 替换 passlib
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
@@ -43,6 +44,10 @@ try:
     from .chat_realtime import ChatRealtimeHub
 except ImportError:
     from chat_realtime import ChatRealtimeHub
+try:
+    from . import account_security as accounts
+except ImportError:
+    import account_security as accounts
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -70,9 +75,6 @@ ADMIN_DISPLAY_NAME = os.getenv("LULU_ADMIN_DISPLAY_NAME", "平台管理员").str
 ADMIN_SESSION_EXPIRE_HOURS = max(int(os.getenv("LULU_ADMIN_SESSION_EXPIRE_HOURS", "72")), 1)
 WECHAT_APP_ID = os.getenv("LULU_WECHAT_APP_ID", "").strip()
 WECHAT_APP_SECRET = os.getenv("LULU_WECHAT_APP_SECRET", "").strip()
-PHONE_CODE_TTL_SECONDS = int(os.getenv("LULU_PHONE_CODE_TTL_SECONDS", "300"))
-PHONE_CODE_STORE: Dict[str, Dict[str, Union[str, int]]] = {}
-PHONE_CODE_LOCK = threading.Lock()
 chat_hub = ChatRealtimeHub()
 
 def verify_password(plain_password, hashed_password):
@@ -90,7 +92,7 @@ def get_password_hash(password):
 SECRET_KEY = os.getenv("LULU_SECRET_KEY", "dev-secret")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES_ENV = os.getenv("LULU_ACCESS_TOKEN_EXPIRE_MINUTES", "").strip()
-ACCESS_TOKEN_EXPIRE_MINUTES = int(ACCESS_TOKEN_EXPIRE_MINUTES_ENV) if ACCESS_TOKEN_EXPIRE_MINUTES_ENV else 0
+ACCESS_TOKEN_EXPIRE_MINUTES = accounts.ACCESS_MINUTES
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 # 与广场发现流一致：无 token 时不报错，供公开读接口（如他人资料）使用
 oauth2_scheme_optional = OAuth2PasswordBearer(tokenUrl="/auth/token", auto_error=False)
@@ -144,10 +146,9 @@ def build_auth_session_response(
     need_bind_phone: bool,
     is_new_user: bool = False
 ) -> schemas.AuthSessionResponse:
-    access_token = create_access_token({"sub": user.id})
+    tokens = accounts.issue_session(db, user)
     return schemas.AuthSessionResponse(
-        access_token=access_token,
-        token_type="bearer",
+        **tokens,
         user=schemas.User.model_validate(hydrate_user_profile_metrics(db, user), from_attributes=True),
         need_bind_phone=need_bind_phone,
         is_new_user=is_new_user,
@@ -170,7 +171,7 @@ def parse_debug_wechat_identity(code: str, platform: str) -> Optional[dict]:
 def exchange_wechat_mobile_code(code: str, platform: str) -> dict:
     debug_identity = parse_debug_wechat_identity(code, platform)
     if debug_identity is not None:
-        return debug_identity
+        raise HTTPException(status_code=400, detail="Debug WeChat identities are disabled")
     if not WECHAT_APP_ID or not WECHAT_APP_SECRET:
         raise HTTPException(status_code=503, detail="WeChat mobile auth is not configured")
     query = urlencode({
@@ -184,7 +185,7 @@ def exchange_wechat_mobile_code(code: str, platform: str) -> dict:
         with urlopen(url, timeout=8) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"WeChat auth request failed: {exc}")
+        raise HTTPException(status_code=502, detail="WeChat auth request failed")
     if payload.get("errcode"):
         raise HTTPException(
             status_code=400,
@@ -208,17 +209,13 @@ def get_db():
     finally:
         db.close()
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
+def get_current_user(request: Request, token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    _, user = accounts.resolve_session(db, token)
+    if not user.is_phone_verified and not (
+        request.url.path.startswith("/auth/")
+        or request.url.path == f"/users/{user.id}"
+    ):
+        raise HTTPException(403, "Verified phone required; complete phone binding")
     return user
 
 
@@ -230,13 +227,10 @@ def get_optional_current_user(
     if not token:
         return None
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            return None
-    except JWTError:
+        _, user = accounts.resolve_session(db, token)
+        return user
+    except HTTPException:
         return None
-    return db.query(models.User).filter(models.User.id == user_id).first()
 
 
 def ensure_self_access(current_user: models.User, user_id: str):
@@ -523,16 +517,9 @@ def _upload_media(
     )
 
 def get_ws_user(token: str, db: Session) -> models.User:
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
+    _, user = accounts.resolve_session(db, token)
+    if not user.is_phone_verified:
+        raise HTTPException(403, "Verified phone required")
     return user
 
 
@@ -1167,25 +1154,29 @@ async def on_shutdown():
 # --- 用户相关 API (User APIs) ---
 
 @app.post("/users/register", response_model=schemas.User)
-def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+def register_user(user: schemas.UserCreate, request: Request, db: Session = Depends(get_db)):
     """
     用户注册
     """
     try:
+        number = accounts.phone(user.phone_number)
+        accounts.rate_limit(db, f"register:{request.client.host if request.client else 'unknown'}", 10, 3600)
+        if not 6 <= len(user.password) or len(user.password.encode("utf-8")) > 72:
+            raise HTTPException(400, "Password must be at least 6 characters and at most 72 bytes")
+        accounts.consume_code(db, number, "register", "", user.verify_code)
         # 1. 检查手机号是否已存在
         if user.phone_number:
             existing_user = db.query(models.User).filter(models.User.phone_number == user.phone_number).first()
             if existing_user:
                 raise HTTPException(status_code=400, detail="Phone number already registered")
                 
-        # 2. 检查 ID 是否已存在 (如果客户端提供了 ID)
-        existing_user_id = db.query(models.User).filter(models.User.id == user.id).first()
-        if existing_user_id:
-            raise HTTPException(status_code=400, detail="User ID already exists")
-
         # 3. 创建用户对象
         hashed_password = get_password_hash(user.password)
-        user_dict = user.dict(exclude={"password"})
+        user_dict = {k: v for k, v in user.model_dump().items() if k in accounts.PROFILE_FIELDS}
+        user_dict["id"] = str(uuid.uuid4())
+        user_dict["phone_number"] = number
+        user_dict["is_phone_verified"] = True
+        user_dict["phone_bound_at"] = current_millis()
         user_dict["hashed_password"] = hashed_password
         
         # 手动设置时间戳，防止 Pydantic 响应模型校验失败
@@ -1197,14 +1188,13 @@ def register_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
         if not user_dict.get("pei_pei_id"):
             user_dict["pei_pei_id"] = generate_pei_pei_id(db)
         
-        print(f"DEBUG: Creating user with dict: {user_dict}")
-        
         db_user = models.User(**user_dict)
         db.add(db_user)
+        db.flush()
+        accounts.bind_identity(db, db_user, "phone", number)
         
         db.commit()
         db.refresh(db_user)
-        print("DEBUG: User created successfully")
         return hydrate_user_profile_metrics(db, db_user)
 
     except HTTPException as he:
@@ -1220,27 +1210,7 @@ def login_user(login_data: schemas.UserLogin, db: Session = Depends(get_db)):
     """
     用户登录
     """
-    print(f"DEBUG: Login attempt for phone: {login_data.phone_number}")
-    user = db.query(models.User).filter(models.User.phone_number == login_data.phone_number).first()
-    if not user:
-        print("DEBUG: User not found")
-        raise HTTPException(status_code=404, detail="User not found")
-        
-    if not user.hashed_password:
-        print("DEBUG: Password not set")
-        # 如果是旧用户没有密码，可能需要特殊处理，或者提示重置密码
-        raise HTTPException(status_code=400, detail="Password not set for this user")
-        
-    print(f"DEBUG: Verifying password. Input: {login_data.password}, Stored Hash: {user.hashed_password}")
-    if not verify_password(login_data.password, user.hashed_password):
-        print("DEBUG: Incorrect password")
-        raise HTTPException(status_code=400, detail="Incorrect password")
-    user.last_login_at = current_millis()
-    user.updated_at = current_millis()
-    db.commit()
-    db.refresh(user)
-    print("DEBUG: Login successful")
-    return hydrate_user_profile_metrics(db, user)
+    raise HTTPException(410, "Use /auth/token to sign in")
 
 @app.get("/users/search", response_model=schemas.User)
 def search_user(query: str, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -1319,25 +1289,25 @@ async def upload_media(
     return _upload_media(file=file, current_user=current_user, biz=biz, image_only=(biz == "avatar"))
 
 @app.put("/users/{user_id}", response_model=schemas.User)
-def update_user(user_id: str, user: schemas.User, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+def update_user(user_id: str, user: schemas.UserUpdate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """
     更新用户信息
     """
     ensure_self_access(current_user, user_id)
-    if user.id != user_id:
+    if user.id is not None and user.id != user_id:
         raise HTTPException(status_code=400, detail="User ID mismatch")
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
     
     # Update fields
-    user_data = user.dict(exclude_unset=True)
+    user_data = user.model_dump(exclude_unset=True)
     # Filter out fields that shouldn't be updated directly via this endpoint if any
     # e.g., hashed_password usually via separate endpoint, but here User schema might not have it
     
     for key, value in user_data.items():
         # Skip id and other immutable fields if necessary
-        if key == "id":
+        if key not in accounts.PROFILE_FIELDS:
             continue
         setattr(db_user, key, value)
     
@@ -1353,19 +1323,21 @@ def update_user(user_id: str, user: schemas.User, db: Session = Depends(get_db),
     return hydrate_user_profile_metrics(db, db_user)
 
 @app.post("/auth/token", response_model=schemas.Token)
-def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login_for_access_token(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    ip = request.client.host if request.client else "unknown"
+    accounts.rate_limit(db, f"password-ip:{ip}", 60, 600)
+    accounts.rate_limit(db, f"password-user:{form_data.username}", 10, 600)
     user = db.query(models.User).filter(models.User.phone_number == form_data.username).first()
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=401, detail="Invalid phone number or password")
     if not user.hashed_password:
-        raise HTTPException(status_code=400, detail="Password not set for this user")
+        raise HTTPException(status_code=401, detail="Invalid phone number or password")
     if not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(status_code=400, detail="Incorrect password")
+        raise HTTPException(status_code=401, detail="Invalid phone number or password")
     user.last_login_at = current_millis()
     user.updated_at = current_millis()
     db.commit()
-    access_token = create_access_token({"sub": user.id})
-    return {"access_token": access_token, "token_type": "bearer"}
+    return accounts.issue_session(db, user)
 
 @app.get("/auth/me", response_model=schemas.User)
 def read_me(current_user: models.User = Depends(get_current_user)):
@@ -1379,18 +1351,27 @@ def read_me(current_user: models.User = Depends(get_current_user)):
         db.close()
 
 
-@app.post("/auth/wechat/mobile/login", response_model=schemas.AuthSessionResponse)
-def wechat_mobile_login(payload: schemas.WeChatMobileLoginRequest, db: Session = Depends(get_db)):
-    platform = normalize_mobile_platform(payload.platform)
-    identity = exchange_wechat_mobile_code(payload.code, platform)
+def finish_wechat_login(db: Session, identity: dict, platform: str, appid: str):
     unionid = identity.get("unionid")
     openid = identity.get("openid")
 
     user = None
-    if unionid:
-        user = db.query(models.User).filter(models.User.wechat_unionid == unionid).first()
-    if user is None:
-        user = db.query(models.User).filter(models.User.wechat_openid == openid).first()
+    provider = f"wechat:{appid}"
+    existing = accounts.verified_identity(db, provider, openid)
+    if existing:
+        user = db.get(models.User, existing.user_id)
+    scope = os.getenv("LULU_WECHAT_OPEN_PLATFORM_ID", "").strip()
+    union_provider = f"wechat_union:{scope}" if scope else None
+    if user is None and unionid and union_provider:
+        union_identity = accounts.verified_identity(db, union_provider, unionid)
+        if union_identity:
+            user = db.get(models.User, union_identity.user_id)
+    # Existing mobile accounts can be linked only by a provider-verified openid.
+    if user is None and platform in {"android", "ios"}:
+        legacy = db.query(models.User).filter(models.User.wechat_openid == openid).all()
+        if len(legacy) > 1:
+            raise HTTPException(409, "Duplicate legacy identity requires account recovery")
+        user = legacy[0] if legacy else None
 
     is_new_user = False
     if user is None:
@@ -1417,8 +1398,11 @@ def wechat_mobile_login(payload: schemas.WeChatMobileLoginRequest, db: Session =
         user.last_login_at = current_millis()
         user.updated_at = current_millis()
 
+    db.flush()
+    accounts.bind_identity(db, user, provider, openid)
+    if unionid and union_provider:
+        accounts.bind_identity(db, user, union_provider, unionid)
     db.commit()
-    db.refresh(user)
     need_bind_phone = not bool(user.phone_number and user.is_phone_verified)
     return build_auth_session_response(
         db=db,
@@ -1428,23 +1412,33 @@ def wechat_mobile_login(payload: schemas.WeChatMobileLoginRequest, db: Session =
     )
 
 
+@app.post("/auth/wechat/mobile/login", response_model=schemas.AuthSessionResponse)
+def wechat_mobile_login(payload: schemas.WeChatMobileLoginRequest, request: Request, db: Session = Depends(get_db)):
+    accounts.rate_limit(db, f"wechat:{request.client.host if request.client else 'unknown'}", 30, 600)
+    platform = normalize_mobile_platform(payload.platform)
+    identity = exchange_wechat_mobile_code(payload.code, platform)
+    return finish_wechat_login(db, identity, platform, WECHAT_APP_ID)
+
+
+@app.post("/auth/wechat/miniapp/login", response_model=schemas.AuthSessionResponse)
+def wechat_miniapp_login(payload: schemas.MiniAppLoginRequest, request: Request, db: Session = Depends(get_db)):
+    accounts.rate_limit(db, f"miniapp:{request.client.host if request.client else 'unknown'}", 30, 600)
+    appid, identity = accounts.exchange_miniapp_code(payload.code)
+    return finish_wechat_login(db, identity, "weapp", appid)
+
+
 @app.post("/auth/phone/send-code", response_model=schemas.PhoneSendCodeResponse)
-def send_phone_code(payload: schemas.PhoneSendCodeRequest):
-    phone_number = normalize_phone_number(payload.phone_number)
-    trace_id = uuid.uuid4().hex
-    verify_code = f"{random.randint(0, 999999):06d}"
-    with PHONE_CODE_LOCK:
-        PHONE_CODE_STORE[phone_number] = {
-            "code": verify_code,
-            "scene": payload.scene,
-            "expires_at": current_millis() + PHONE_CODE_TTL_SECONDS * 1000,
-            "trace_id": trace_id,
-        }
-    return schemas.PhoneSendCodeResponse(
-        success=True,
-        cooldown_seconds=60,
-        trace_id=trace_id,
-        debug_code=verify_code if APP_ENV != "production" else None,
+def send_phone_code(
+    payload: schemas.PhoneSendCodeRequest, request: Request,
+    db: Session = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_optional_current_user),
+):
+    if payload.scene == "bind_wechat_phone" and current_user is None:
+        raise HTTPException(401, "Sign in before binding a phone")
+    return accounts.send_code(
+        db, payload.phone_number, payload.scene,
+        current_user.id if payload.scene == "bind_wechat_phone" else "",
+        request.client.host if request.client else "unknown",
     )
 
 
@@ -1454,18 +1448,10 @@ def bind_wechat_phone(
     db: Session = Depends(get_db),
     current_user: models.User = Depends(get_current_user)
 ):
-    phone_number = normalize_phone_number(payload.phone_number)
-    with PHONE_CODE_LOCK:
-        record = PHONE_CODE_STORE.get(phone_number)
-        if record is None:
-            raise HTTPException(status_code=400, detail="Verification code not sent")
-        if int(record.get("expires_at", 0)) < current_millis():
-            PHONE_CODE_STORE.pop(phone_number, None)
-            raise HTTPException(status_code=400, detail="Verification code expired")
-        if record.get("scene") != "bind_wechat_phone":
-            raise HTTPException(status_code=400, detail="Verification code scene mismatch")
-        if str(record.get("code", "")) != payload.verify_code.strip():
-            raise HTTPException(status_code=400, detail="Incorrect verification code")
+    phone_number = accounts.phone(payload.phone_number)
+    if current_user.is_phone_verified and current_user.phone_number != phone_number:
+        raise HTTPException(409, "Phone replacement requires a separate recovery flow")
+    accounts.consume_code(db, phone_number, "bind_wechat_phone", current_user.id, payload.verify_code)
 
     existing_user = db.query(models.User).filter(
         models.User.phone_number == phone_number,
@@ -1474,6 +1460,7 @@ def bind_wechat_phone(
     if existing_user is not None:
         raise HTTPException(status_code=409, detail="Phone number already bound to another account")
 
+    accounts.bind_identity(db, current_user, "phone", phone_number)
     current_user.phone_number = phone_number
     current_user.is_phone_verified = True
     current_user.phone_bound_at = current_millis()
@@ -1483,9 +1470,69 @@ def bind_wechat_phone(
 
     db.commit()
     db.refresh(current_user)
-    with PHONE_CODE_LOCK:
-        PHONE_CODE_STORE.pop(phone_number, None)
     return hydrate_user_profile_metrics(db, current_user)
+
+
+def finish_phone_login(db: Session, number: str):
+    identity = accounts.verified_identity(db, "phone", number)
+    user = db.get(models.User, identity.user_id) if identity else None
+    if user is None:
+        legacy = db.query(models.User).filter(models.User.phone_number == number).all()
+        if len(legacy) > 1:
+            raise HTTPException(409, "Duplicate phone requires account recovery")
+        user = legacy[0] if legacy else None
+    is_new = user is None
+    if user is None:
+        user = models.User(id=str(uuid.uuid4()), name="", phone_number=number,
+                           pei_pei_id=generate_pei_pei_id(db), created_at=current_millis())
+        db.add(user)
+        db.flush()
+    accounts.bind_identity(db, user, "phone", number)
+    user.is_phone_verified = True
+    user.phone_bound_at = user.phone_bound_at or current_millis()
+    user.last_login_at = current_millis()
+    user.updated_at = current_millis()
+    db.commit()
+    return build_auth_session_response(db, user, False, is_new)
+
+
+@app.post("/auth/phone/login", response_model=schemas.AuthSessionResponse)
+def phone_login(payload: schemas.PhoneLoginRequest, request: Request, db: Session = Depends(get_db)):
+    accounts.rate_limit(db, f"phone-login:{request.client.host if request.client else 'unknown'}", 30, 600)
+    number = accounts.phone(payload.phone_number)
+    accounts.consume_code(db, number, "login", "", payload.verify_code)
+    return finish_phone_login(db, number)
+
+
+@app.post("/auth/phone/one-key/login", response_model=schemas.AuthSessionResponse)
+def one_key_login(payload: schemas.OneKeyLoginRequest, request: Request, db: Session = Depends(get_db)):
+    accounts.rate_limit(db, f"one-key:{request.client.host if request.client else 'unknown'}", 30, 600)
+    result = accounts.aliyun_rpc("dypnsapi.aliyuncs.com", "GetMobile", "2017-05-25",
+                                 {"AccessToken": payload.access_token})
+    number = accounts.phone((result.get("GetMobileResultDTO") or {}).get("Mobile"))
+    return finish_phone_login(db, number)
+
+
+@app.post("/auth/refresh", response_model=schemas.Token)
+def refresh_session(payload: schemas.RefreshSessionRequest, db: Session = Depends(get_db)):
+    return accounts.rotate_session(db, payload.refresh_token)
+
+
+@app.post("/auth/logout")
+def logout_session(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    session, _ = accounts.resolve_session(db, token)
+    session.revoked_at = current_millis()
+    db.commit()
+    return {"success": True}
+
+
+@app.post("/auth/logout-all")
+def logout_all_sessions(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    _, user = accounts.resolve_session(db, token)
+    db.query(models.AuthSession).filter_by(user_id=user.id, revoked_at=0).update(
+        {"revoked_at": current_millis()}, synchronize_session=False)
+    db.commit()
+    return {"success": True}
 
 
 @app.get("/me/wishlist/services", response_model=schemas.FavoriteServicesResponse)
@@ -1653,8 +1700,7 @@ def update_service(
     current_user: models.User = Depends(get_current_user)
 ):
     db_item = db.query(models.Service).filter(
-        models.Service.id == service_id,
-        models.Service.is_deleted == False
+        models.Service.id == service_id
     ).first()
     if db_item is None:
         raise HTTPException(status_code=404, detail="Service not found")
@@ -2645,11 +2691,20 @@ async def chat_websocket(websocket: WebSocket, token: str):
     user = None
     try:
         user = get_ws_user(token, db)
+        session_id = accounts.resolve_session(db, token)[0].id
         await websocket.accept()
         await chat_hub.register(user.id, websocket)
         await websocket.send_json({"type": "connected", "user_id": user.id})
         while True:
-            raw = await websocket.receive_text()
+            db.rollback()
+            db.expire_all()
+            live_session = db.get(models.AuthSession, session_id)
+            if live_session is None or live_session.revoked_at or live_session.expires_at <= current_millis():
+                raise HTTPException(401, "Session revoked")
+            try:
+                raw = await asyncio.wait_for(websocket.receive_text(), timeout=20)
+            except asyncio.TimeoutError:
+                continue
             try:
                 payload = json.loads(raw)
             except Exception:

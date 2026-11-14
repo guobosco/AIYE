@@ -887,8 +887,7 @@ fun UserInfoScreen(navController: NavController, showBackButton: Boolean = true)
             isPhone = true,
             onDismiss = { showPhoneDialog = false },
             onConfirm = { 
-                // 修改手机号后，重置验证状态为 false
-                AppDataStore.updateCurrentUser(user.copy(phoneNumber = it, isPhoneVerified = false))
+                Toast.makeText(context, "手机号换绑暂未开放，原手机号保持不变", Toast.LENGTH_LONG).show()
                 showPhoneDialog = false 
             }
         )
@@ -899,7 +898,6 @@ fun UserInfoScreen(navController: NavController, showBackButton: Boolean = true)
             phoneNumber = user.phoneNumber,
             onDismiss = { showVerifyPhoneDialog = false },
             onConfirm = {
-                AppDataStore.updateCurrentUser(user.copy(isPhoneVerified = true))
                 showVerifyPhoneDialog = false
                 Toast.makeText(context, "验证成功", Toast.LENGTH_SHORT).show()
             }

@@ -223,6 +223,18 @@ class LuluRepository(
 
     init {
         restoreProfileActivityFlows(_currentUserId.value)
+        scope.launch {
+            AuthSession.signedIn.collect { signedIn ->
+                if (!signedIn) setCurrentUserId("")
+            }
+        }
+        scope.launch {
+            AuthSession.tokenChanges.collect { token ->
+                disconnectChatSocket()
+                chatSocketConnected = false
+                if (token != null && currentUserId.isNotBlank()) connectChatSocket()
+            }
+        }
     }
 
     fun setCurrentUserId(userId: String) {
@@ -395,12 +407,13 @@ class LuluRepository(
             viewedAt = System.currentTimeMillis(),
         )
 
-    suspend fun registerUser(user: User, password: String): Result<User> = withContext(Dispatchers.IO) {
+    suspend fun registerUser(user: User, password: String, verifyCode: String = ""): Result<User> = withContext(Dispatchers.IO) {
         runCatching {
-            val registered = apiService?.registerUser(
+            apiService?.registerUser(
                 RegisterRequest(
                     id = user.id,
                     password = password,
+                    verifyCode = verifyCode,
                     phoneNumber = user.phoneNumber,
                     name = user.name,
                     peiPeiId = user.peiPeiId,
@@ -411,7 +424,7 @@ class LuluRepository(
                 )
             ) ?: error("ApiService is not available")
             val authenticated = loginUser(user.phoneNumber, password)
-            authenticated ?: registered
+            authenticated ?: error("注册成功，请重新登录")
         }
     }
 
@@ -419,12 +432,13 @@ class LuluRepository(
         val service = apiService ?: return@withContext null
         try {
             val token = service.loginForAccessToken(phoneNumber, password)
-            AuthSession.updateAccessToken(token.accessToken)
+            AuthSession.updateSession(token.accessToken, token.refreshToken)
             val user = service.getCurrentUserProfile()
             userDao.insertUser(user)
             setCurrentUserId(user.id)
             user
         } catch (e: Exception) {
+            AuthSession.updateAccessToken(null)
             Log.e(TAG, "loginUser failed", e)
             null
         }
@@ -441,7 +455,7 @@ class LuluRepository(
                     appVersion = BuildConfig.VERSION_NAME
                 )
             )
-            AuthSession.updateAccessToken(response.accessToken)
+            AuthSession.updateSession(response.accessToken, response.refreshToken)
             userDao.insertUser(response.user)
             setCurrentUserId(response.user.id)
             response
@@ -459,6 +473,26 @@ class LuluRepository(
             Log.e(TAG, "sendBindPhoneCode failed", it)
         }.getOrNull()
     }
+
+    suspend fun sendPhoneCode(phoneNumber: String, scene: String): Result<PhoneSendCodeResponse> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                requireNotNull(apiService).sendPhoneCode(PhoneSendCodeRequest(phoneNumber, scene))
+            }
+        }
+
+    suspend fun loginWithPhoneCode(phoneNumber: String, code: String): Result<User> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val response = requireNotNull(apiService).loginWithPhoneCode(
+                    com.example.aiye.data.remote.PhoneLoginRequest(phoneNumber, code)
+                )
+                AuthSession.updateSession(response.accessToken, response.refreshToken)
+                userDao.insertUser(response.user)
+                setCurrentUserId(response.user.id)
+                response.user
+            }.onFailure { AuthSession.updateAccessToken(null) }
+        }
 
     suspend fun bindWeChatPhone(phoneNumber: String, verifyCode: String): User? = withContext(Dispatchers.IO) {
         val service = apiService ?: return@withContext null
@@ -1251,6 +1285,9 @@ class LuluRepository(
 
     suspend fun logout() {
         val userId = currentUserId
+        withContext(Dispatchers.IO) {
+            runCatching { apiService?.logoutSession() }
+        }
         AuthSession.updateAccessToken(null)
         disconnectChatSocket()
         setCurrentUserId("")

@@ -1,39 +1,26 @@
 {
   "miniprogramRoot": "dist/",
-  "sitemapLocation": "dist/sitemap.json",
+  "cloudfunctionRoot": "cloudfunctions/",
   "projectname": "wechat_aiye",
-  "description": "aiye mini program",
+  "description": "爱野微信小程序",
   "appid": "wx2bdc1d65e1fa5d23",
   "setting": {
-    "urlCheck": false,
-    "es6": true,
-    "enhance": true,
-    "postcss": true,
-    "minified": true,
-    "compileWorklet": false,
-    "uglifyFileName": false,
-    "uploadWithSourceMap": true,
-    "packNpmManually": false,
-    "packNpmRelationList": [],
-    "minifyWXSS": true,
-    "minifyWXML": true,
-    "localPlugins": false,
-    "disableUseStrict": false,
-    "useCompilerPlugins": false,
-    "condition": false,
-    "swc": false,
-    "disableSWC": true,
-    "babelSetting": {
-      "ignore": [],
-      "disablePlugins": [],
-      "outputPath": ""
-    }
+    "urlCheck": true,
+    "es6": false,
+    "enhance": false,
+    "compileHotReLoad": false,
+    "postcss": false,
+    "preloadBackgroundData": false,
+    "minified": false,
+    "newFeature": true,
+    "autoAudits": false,
+    "coverView": true,
+    "showShadowRootInWxmlPanel": false,
+    "scopeDataCheck": false,
+    "useCompilerModule": false
   },
   "compileType": "miniprogram",
+  "simulatorType": "wechat",
   "simulatorPluginLibVersion": {},
-  "packOptions": {
-    "ignore": [],
-    "include": []
-  },
-  "editorSetting": {}
+  "condition": {}
 }

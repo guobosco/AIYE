@@ -1,2 +1,3 @@
-AIYE_BASE_URL = http://123.57.67.153:8000
+// Empty expansion prevents // from being treated as a comment.
+AIYE_BASE_URL = http:/$()/192.168.43.168:8000
 AIYE_ALLOW_INSECURE_HTTPS = YES

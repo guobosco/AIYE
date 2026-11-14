@@ -48,6 +48,7 @@ import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.random.Random
+import com.example.aiye.BuildConfig
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,11 +62,6 @@ fun LoginScreen(navController: NavController, initialPhone: String? = null) {
     val isDarkTheme = isSystemInDarkTheme()
     val backgroundColor = if (isDarkTheme) Color.Black else Color.White
     
-    // Login Stage: 2 = Input Phone/Code (Default for Real Backend Login)
-    var loginStage by remember { mutableStateOf(2) }
-
-    // Login Step for Input Mode (Stage 2): 0 = Input Phone (Default)
-    var loginStep by remember { mutableStateOf(0) }
     val focusRequester = remember { androidx.compose.ui.focus.FocusRequester() }
 
     LaunchedEffect(Unit) {
@@ -82,6 +78,7 @@ fun LoginScreen(navController: NavController, initialPhone: String? = null) {
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var isRegisterMode by remember { mutableStateOf(false) }
+    var isSmsMode by remember { mutableStateOf(false) }
     var verifyCode by remember { mutableStateOf("") }
     var isCodeSent by remember { mutableStateOf(false) }
     var countdown by remember { mutableStateOf(60) }
@@ -161,7 +158,7 @@ fun LoginScreen(navController: NavController, initialPhone: String? = null) {
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Password Input
-                OutlinedTextField(
+                if (!isSmsMode || isRegisterMode) OutlinedTextField(
                     value = password,
                     onValueChange = { password = it },
                     label = { Text("密码") },
@@ -185,6 +182,42 @@ fun LoginScreen(navController: NavController, initialPhone: String? = null) {
                         shape = RoundedCornerShape(8.dp)
                     )
                 }
+
+                if (isRegisterMode || isSmsMode) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = verifyCode,
+                            onValueChange = { verifyCode = it.filter { c -> c in '0'..'9' }.take(6) },
+                            label = { Text("验证码") },
+                            modifier = Modifier.weight(1f),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                        TextButton(
+                            enabled = !isCodeSent && !isLoading && phoneNumber.length == 11,
+                            onClick = {
+                                scope.launch {
+                                    isCodeSent = true
+                                    val result = repository.sendPhoneCode(phoneNumber, if (isRegisterMode) "register" else "login")
+                                    result.onSuccess { response ->
+                                        if (BuildConfig.DEBUG) response.debugCode?.let { verifyCode = it }
+                                        countdown = response.cooldownSeconds
+                                        while (countdown > 0) { delay(1000); countdown-- }
+                                    }.onFailure {
+                                        Toast.makeText(context, "验证码发送失败，请检查短信服务配置或稍后重试", Toast.LENGTH_LONG).show()
+                                    }
+                                    isCodeSent = false
+                                }
+                            }
+                        ) { Text(if (isCodeSent) "${countdown}s" else "获取验证码") }
+                    }
+                }
+                if (!isRegisterMode) {
+                    TextButton(onClick = { isSmsMode = !isSmsMode; verifyCode = "" }) {
+                        Text(if (isSmsMode) "使用密码登录" else "使用短信验证码登录")
+                    }
+                }
                 
                 Spacer(modifier = Modifier.height(32.dp))
                 
@@ -194,7 +227,7 @@ fun LoginScreen(navController: NavController, initialPhone: String? = null) {
                             Toast.makeText(context, "请输入11位手机号", Toast.LENGTH_SHORT).show()
                             return@Button
                         }
-                        if (password.isEmpty()) {
+                        if ((!isSmsMode || isRegisterMode) && password.isEmpty()) {
                             Toast.makeText(context, "请输入密码", Toast.LENGTH_SHORT).show()
                             return@Button
                         }
@@ -218,7 +251,7 @@ fun LoginScreen(navController: NavController, initialPhone: String? = null) {
                                         createdAt = System.currentTimeMillis(),
                                         updatedAt = System.currentTimeMillis()
                                     )
-                                    val registered = repository.registerUser(newUser, password)
+                                    val registered = repository.registerUser(newUser, password, verifyCode)
                                     registered.onSuccess {
                                         Toast.makeText(context, "注册成功", Toast.LENGTH_SHORT).show()
                                         repository.syncAfterLogin(context)
@@ -238,12 +271,15 @@ fun LoginScreen(navController: NavController, initialPhone: String? = null) {
                             scope.launch {
                                 isLoading = true
                                 try {
-                                    val user = repository.loginUser(phoneNumber, password)
+                                    val user = if (isSmsMode) repository.loginWithPhoneCode(phoneNumber, verifyCode).getOrThrow()
+                                        else repository.loginUser(phoneNumber, password)
                                     if (user != null) {
                                         Toast.makeText(context, "登录成功", Toast.LENGTH_SHORT).show()
                                         repository.syncAfterLogin(context)
 
-                                        if (user.hasCompletedOnboardingProfile()) {
+                                        if (!user.isPhoneVerified) {
+                                            navController.navigate(Screen.WeChatBindPhone.route)
+                                        } else if (user.hasCompletedOnboardingProfile()) {
                                             navController.navigate(Screen.Home.route) { popUpTo(0) { inclusive = true } }
                                         } else if (user.name.isBlank()) {
                                             navController.navigate(Screen.CompleteName.route)

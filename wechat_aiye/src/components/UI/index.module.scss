@@ -1,0 +1,33 @@
+@use '@/styles/variables.scss' as *;
+.button {
+  @include button-reset;
+  @include interactive;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100rpx;
+  min-width: 120rpx;
+  padding: 0 32rpx;
+  border-radius: 50rpx;
+  border: 2rpx solid $color-primary;
+  background: linear-gradient(135deg, $color-primary, $color-primary-strong);
+  color: white;
+  font-size: 28rpx;
+  font-weight: 600;
+  &[disabled] { opacity: .45; }
+}
+.outline { background: white; color: $color-primary; }
+.small { height: 72rpx; border-radius: 36rpx; padding: 0 24rpx; font-size: 24rpx; }
+.state { padding: 96rpx 32rpx; text-align: center; }
+.stateTitle { display: block; font-size: 30rpx; font-weight: 600; }
+.stateMessage { display: block; margin-top: 16rpx; font-size: 26rpx; color: $color-text-secondary; line-height: 1.6; }
+.stateAction { width: 280rpx; margin: 32rpx auto 0; }
+.avatar { display: inline-flex; align-items: center; justify-content: center; border-radius: 999rpx; overflow: hidden; background: $color-primary-container; color: $color-primary; flex-shrink: 0; font-weight: 600; }
+.avatarImage { width: 100%; height: 100%; }
+.row { display: flex; align-items: center; min-height: 104rpx; padding: 16rpx 0; border-bottom: 1rpx solid $color-divider; gap: 24rpx; }
+.rowLabel { flex: 1; min-width: 0; font-size: 28rpx; }
+.rowValue { @include text-ellipsis; max-width: 400rpx; font-size: 26rpx; color: $color-text-secondary; }
+.rowArrow { color: $color-text-tertiary; font-size: 36rpx; }
+.tags { display: flex; flex-wrap: wrap; gap: 16rpx; }
+.tag { font-size: 24rpx; padding: 12rpx 20rpx; border: 1rpx solid $color-border; border-radius: 999rpx; color: $color-text-secondary; white-space: nowrap; background: white; }
+.selected { color: $color-primary; background: $color-primary-soft; border-color: $color-primary; }

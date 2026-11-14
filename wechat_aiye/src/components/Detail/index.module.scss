@@ -1,0 +1,34 @@
+@use '@/styles/variables.scss' as *;
+.page { min-height: 100vh; background: white; }
+.hero { position: relative; height: 600rpx; }
+.swiper { height: 100%; }
+.image { width: 100%; height: 100%; }
+.missing { height: 100%; display: flex; align-items: center; justify-content: center; background: $color-bg-page; color: $color-text-secondary; }
+.pager { position: absolute; right: 32rpx; bottom: 32rpx; padding: 8rpx 20rpx; border-radius: 999rpx; background: rgba(0,0,0,.45); color: white; font-size: 24rpx; }
+.panel { padding: 32rpx; }
+.title { display: block; font-size: 42rpx; font-weight: 700; line-height: 1.4; }
+.meta { display: block; color: $color-text-secondary; font-size: 26rpx; line-height: 1.6; margin-top: 16rpx; }
+.actions { display: flex; gap: 24rpx; margin-top: 24rpx; > view { flex: 1; } }
+.section { padding: 40rpx 0; border-bottom: 1rpx solid $color-divider; }
+.heading { display: block; font-size: 34rpx; font-weight: 600; margin-bottom: 24rpx; }
+.text { display: block; font-size: 28rpx; line-height: 1.8; white-space: pre-wrap; }
+.host { display: flex; align-items: center; gap: 24rpx; padding: 32rpx 0; border-bottom: 1rpx solid $color-divider; }
+.hostInfo { flex: 1; min-width: 0; }
+.hostName { font-size: 30rpx; font-weight: 600; display: block; @include text-ellipsis; }
+.step { margin-bottom: 32rpx; }
+.stepImage { width: 100%; height: 400rpx; border-radius: 24rpx; margin-top: 16rpx; }
+.bottom { position: fixed; bottom: 0; left: 0; right: 0; z-index: 30; display: flex; align-items: center; gap: 24rpx; padding: 24rpx 32rpx calc(24rpx + env(safe-area-inset-bottom)); background: white; box-shadow: 0 -2rpx 20rpx rgba(0,0,0,.08); }
+.bottomPrice { flex: 1; min-width: 0; font-size: 36rpx; font-weight: 600; }
+.spacer { height: 176rpx; }
+.mask { position: fixed; z-index: 100; inset: 0; display: flex; align-items: flex-end; background: rgba(0,0,0,.4); }
+.sheet { width: 100%; max-height: 85vh; padding: 32rpx 32rpx calc(32rpx + env(safe-area-inset-bottom)); background: white; border-radius: 32rpx 32rpx 0 0; }
+.sheetHeader { display: flex; align-items: center; justify-content: space-between; }
+.close { padding: 16rpx; font-size: 40rpx; }
+.scroll { max-height: 55vh; }
+.dates { @include scroll-x-container; padding-bottom: 16rpx; }
+.date { @include scroll-x-item(auto); min-width: 128rpx; padding: 20rpx; margin-right: 16rpx; border: 1rpx solid $color-border; border-radius: 16rpx; font-size: 24rpx; }
+.times { display: flex; flex-wrap: wrap; gap: 16rpx; margin: 24rpx 0; }
+.time { min-width: 104rpx; padding: 16rpx; border: 1rpx solid $color-border; border-radius: 12rpx; font-size: 24rpx; text-align: center; }
+.plan { border: 1rpx solid $color-border; border-radius: 16rpx; padding: 24rpx; margin-bottom: 16rpx; }
+.selected { background: $color-primary-soft; border-color: $color-primary; color: $color-primary; }
+.share { @include button-reset; background: white; border: 2rpx solid $color-primary; border-radius: 50rpx; height: 100rpx; line-height: 96rpx; color: $color-primary; font-size: 28rpx; }

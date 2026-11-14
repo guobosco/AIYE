@@ -1,4 +1,6 @@
 export default definePageConfig({
   navigationBarTitleText: '服务详情',
-  navigationStyle: 'custom',
+  navigationStyle: 'default',
+  enableShareAppMessage: true,
+  enablePullDownRefresh: true,
 });

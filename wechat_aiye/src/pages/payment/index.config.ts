@@ -1,4 +1,4 @@
 export default definePageConfig({
-  navigationBarTitleText: '支付确认',
+  navigationBarTitleText: '预定问询',
   navigationStyle: 'default',
 });

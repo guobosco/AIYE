@@ -10,13 +10,13 @@ $space-4: 32rpx;
 $space-5: 48rpx;
 $space-6: 64rpx;
 $radius-sm: 8rpx;
-$radius-md: 8rpx;
-$radius-lg: 8rpx;
-$radius-button: 8rpx;
+$radius-md: 16rpx;
+$radius-lg: 28rpx;
+$radius-button: 50rpx;
 $radius-round: 999rpx;
 $shadow-card: 0 8rpx 30rpx $color-shadow;
-$button-height-md: 80rpx;
-$button-height-lg: 96rpx;
+$button-height-md: 100rpx;
+$button-height-lg: 100rpx;
 $transition-base: 0.24s ease;
 
 @mixin text-ellipsis {
@@ -38,6 +38,21 @@ $transition-base: 0.24s ease;
   background: transparent;
   border: none;
   line-height: 1;
+  white-space: nowrap;
+  &::after { border: 0; }
+}
+
+@mixin scroll-x-container {
+  width: 100%;
+  white-space: nowrap;
+}
+
+@mixin scroll-x-item($width) {
+  display: inline-block;
+  width: $width;
+  white-space: normal;
+  vertical-align: top;
+  flex-shrink: 0;
 }
 
 @mixin card-surface {

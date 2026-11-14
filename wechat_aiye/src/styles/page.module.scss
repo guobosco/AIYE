@@ -1,0 +1,41 @@
+@use '@/styles/variables.scss' as *;
+.page { min-height: 100vh; padding: 24rpx 32rpx calc(48rpx + env(safe-area-inset-bottom)); background: white; }
+.cream { background: $color-bg-page; }
+.header { display: flex; align-items: center; justify-content: space-between; gap: 24rpx; padding: 16rpx 0 32rpx; }
+.title { font-size: 40rpx; font-weight: 700; line-height: 1.4; }
+.heading { display: block; font-size: 34rpx; font-weight: 600; margin-bottom: 24rpx; }
+.subtitle { display: block; color: $color-text-secondary; font-size: 26rpx; line-height: 1.6; margin-top: 16rpx; }
+.section { padding: 32rpx 0; border-bottom: 1rpx solid $color-divider; }
+.surface { background: white; border-radius: 24rpx; padding: 32rpx; margin-bottom: 24rpx; }
+.tabs { @include scroll-x-container; margin-bottom: 24rpx; }
+.tabRow { display: inline-flex; gap: 16rpx; }
+.tab { @include scroll-x-item(auto); padding: 20rpx 28rpx; border-radius: 999rpx; font-size: 26rpx; color: $color-text-secondary; background: #f6f6f6; white-space: nowrap; }
+.active { background: $color-text-primary; color: white; }
+.search { display: flex; align-items: center; gap: 24rpx; margin-bottom: 24rpx; }
+.input { height: 96rpx; min-width: 0; flex: 1; padding: 0 24rpx; border: 1rpx solid $color-border; border-radius: 16rpx; background: #fafafa; font-size: 28rpx; }
+.field { margin-bottom: 32rpx; }
+.label { display: block; font-size: 26rpx; color: $color-text-secondary; margin-bottom: 16rpx; }
+.textarea { box-sizing: border-box; width: 100%; min-height: 220rpx; padding: 24rpx; border: 1rpx solid $color-border; border-radius: 16rpx; background: #fafafa; font-size: 28rpx; line-height: 1.6; }
+.picker { min-height: 88rpx; display: flex; align-items: center; justify-content: space-between; padding: 16rpx 24rpx; border: 1rpx solid $color-border; border-radius: 16rpx; font-size: 28rpx; }
+.actions { display: flex; gap: 16rpx; align-items: center; margin-top: 24rpx; > view { flex: 1; min-width: 0; } }
+.link { color: $color-primary; font-size: 26rpx; padding: 16rpx 0; }
+.muted { color: $color-text-secondary; font-size: 24rpx; line-height: 1.6; }
+.text { display: block; font-size: 28rpx; line-height: 1.8; white-space: pre-wrap; overflow-wrap: anywhere; }
+.row { display: flex; align-items: center; gap: 24rpx; min-height: 104rpx; padding: 24rpx 0; border-bottom: 1rpx solid $color-divider; }
+.rowBody { flex: 1; min-width: 0; }
+.rowTitle { display: block; font-size: 28rpx; font-weight: 600; @include text-ellipsis; }
+.rowMeta { display: block; margin-top: 12rpx; font-size: 24rpx; color: $color-text-secondary; @include text-ellipsis; }
+.badge { display: inline-block; padding: 6rpx 16rpx; background: $color-primary-soft; color: $color-primary; font-size: 22rpx; border-radius: 999rpx; }
+.photos { display: flex; flex-wrap: wrap; gap: 16rpx; }
+.photo { width: 206rpx; height: 206rpx; border-radius: 16rpx; overflow: hidden; position: relative; background: $color-bg-page; }
+.photoImage { width: 100%; height: 100%; }
+.photo .badge { position: absolute; left: 8rpx; bottom: 8rpx; z-index: 1; }
+.remove { position: absolute; right: 0; top: 0; width: 64rpx; height: 64rpx; background: rgba(0,0,0,.45); color: white; text-align: center; line-height: 64rpx; }
+.addPhoto { display: flex; align-items: center; justify-content: center; color: $color-text-secondary; font-size: 48rpx; border: 1rpx dashed $color-border; }
+.bottom { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; padding: 24rpx 32rpx calc(24rpx + env(safe-area-inset-bottom)); background: white; box-shadow: 0 -2rpx 16rpx rgba(0,0,0,.06); display: flex; gap: 24rpx; align-items: center; > view { flex: 1; min-width: 0; } }
+.spacer { height: 176rpx; }
+.number { display: block; font-size: 48rpx; font-weight: 700; margin: 24rpx 0; }
+.notice { padding: 24rpx; background: $color-primary-soft; border-radius: 16rpx; color: $color-text-secondary; font-size: 26rpx; line-height: 1.6; margin: 24rpx 0; }
+.grid { display: flex; flex-wrap: wrap; gap: 16rpx; }
+.gridCell { width: calc((100% - 96rpx) / 7); text-align: center; padding: 20rpx 0; font-size: 24rpx; border-radius: 12rpx; background: #f5f5f5; }
+.closed { background: $color-primary-container; color: $color-primary; }

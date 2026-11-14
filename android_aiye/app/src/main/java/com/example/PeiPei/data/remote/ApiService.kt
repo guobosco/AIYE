@@ -27,7 +27,8 @@ data class UploadResponse(
 
 data class TokenResponse(
     @SerializedName("access_token") val accessToken: String,
-    @SerializedName("token_type") val tokenType: String
+    @SerializedName("token_type") val tokenType: String,
+    @SerializedName("refresh_token") val refreshToken: String? = null
 )
 
 data class AuthSessionResponse(
@@ -35,7 +36,13 @@ data class AuthSessionResponse(
     @SerializedName("token_type") val tokenType: String,
     val user: User,
     @SerializedName("need_bind_phone") val needBindPhone: Boolean,
-    @SerializedName("is_new_user") val isNewUser: Boolean
+    @SerializedName("is_new_user") val isNewUser: Boolean,
+    @SerializedName("refresh_token") val refreshToken: String? = null
+)
+
+data class PhoneLoginRequest(
+    @SerializedName("phone_number") val phoneNumber: String,
+    @SerializedName("verify_code") val verifyCode: String
 )
 
 data class WeChatMobileLoginRequest(
@@ -80,6 +87,7 @@ data class WishlistProfilePayload(
 data class RegisterRequest(
     val id: String,
     val password: String,
+    @SerializedName("verify_code") val verifyCode: String = "",
     @SerializedName("phone_number") val phoneNumber: String,
     val name: String = "",
     @SerializedName("pei_pei_id") val peiPeiId: String = "",
@@ -90,6 +98,12 @@ data class RegisterRequest(
 )
 
 interface ApiService {
+    @POST("auth/phone/login")
+    suspend fun loginWithPhoneCode(@Body request: PhoneLoginRequest): AuthSessionResponse
+
+    @POST("auth/logout")
+    suspend fun logoutSession(): Map<String, Boolean>
+
     // User endpoints
     @Multipart
     @POST("upload/avatar")

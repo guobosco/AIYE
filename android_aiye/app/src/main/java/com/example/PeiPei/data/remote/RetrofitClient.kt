@@ -14,6 +14,8 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import okhttp3.logging.HttpLoggingInterceptor
@@ -131,12 +133,14 @@ object RetrofitClient {
         .create()
 
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
-        level = if (BuildConfig.ENABLE_HTTP_LOGGING) {
-            HttpLoggingInterceptor.Level.BODY
-        } else {
-            HttpLoggingInterceptor.Level.NONE
-        }
+        // Bodies and WebSocket URLs contain passwords, codes and tokens.
+        level = HttpLoggingInterceptor.Level.NONE
     }
+
+    private val refreshClient = OkHttpClient.Builder()
+        .connectTimeout(8, TimeUnit.SECONDS)
+        .callTimeout(15, TimeUnit.SECONDS)
+        .build()
 
     private val authInterceptor = Interceptor { chain ->
         val token = AuthSession.getAccessToken()
@@ -148,7 +152,41 @@ object RetrofitClient {
                 .header("Authorization", "Bearer $token")
                 .build()
         }
-        chain.proceed(request)
+        val response = chain.proceed(request)
+        if (response.code != 401 || token.isNullOrEmpty() || request.url.encodedPath == "/auth/token") {
+            response
+        } else {
+            val refreshed = synchronized(AuthSession) {
+                val current = AuthSession.getAccessToken()
+                if (current != token) current else {
+                    val refresh = AuthSession.getRefreshToken()
+                    if (refresh.isNullOrBlank()) {
+                        AuthSession.updateAccessToken(null)
+                        null
+                    } else {
+                        runCatching {
+                            val body = org.json.JSONObject().put("refresh_token", refresh).toString()
+                                .toRequestBody("application/json".toMediaType())
+                            refreshClient.newCall(Request.Builder().url("${BASE_URL}auth/refresh").post(body).build())
+                                .execute().use { result ->
+                                    if (result.code == 401) {
+                                        AuthSession.updateAccessToken(null)
+                                        null
+                                    } else if (result.isSuccessful) {
+                                        val data = gson.fromJson(result.body?.string(), TokenResponse::class.java)
+                                        AuthSession.updateSession(data.accessToken, data.refreshToken)
+                                        data.accessToken
+                                    } else null
+                                }
+                        }.getOrNull()
+                    }
+                }
+            }
+            if (refreshed == null) response else {
+                response.close()
+                chain.proceed(request.newBuilder().header("Authorization", "Bearer $refreshed").build())
+            }
+        }
     }
 
     private val okHttpClient = OkHttpClient.Builder().apply {

@@ -17,6 +17,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.example.aiye.data.local.AppDataStore
 
 @Composable
 fun VerifyPhoneDialog(
@@ -27,6 +28,7 @@ fun VerifyPhoneDialog(
     var verifyCode by remember { mutableStateOf("") }
     var isCodeSent by remember { mutableStateOf(false) }
     var countdown by remember { mutableStateOf(60) }
+    var verifying by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val focusRequester = remember { FocusRequester() }
@@ -59,9 +61,14 @@ fun VerifyPhoneDialog(
                     Button(
                         onClick = {
                             isCodeSent = true
-                            countdown = 60
-                            Toast.makeText(context, "验证码已发送", Toast.LENGTH_SHORT).show()
                             scope.launch {
+                                val result = AppDataStore.getRepository()?.sendPhoneCode(phoneNumber, "bind_wechat_phone")
+                                if (result == null || result.isFailure) {
+                                    isCodeSent = false
+                                    Toast.makeText(context, "验证码发送失败，请稍后重试", Toast.LENGTH_LONG).show()
+                                    return@launch
+                                }
+                                countdown = result.getOrThrow().cooldownSeconds
                                 while (countdown > 0) {
                                     delay(1000)
                                     countdown--
@@ -80,12 +87,19 @@ fun VerifyPhoneDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    if (verifyCode.length >= 4) { // Simple validation
-                        onConfirm()
+                    if (verifyCode.length == 6 && !verifying) {
+                        scope.launch {
+                            verifying = true
+                            val verified = AppDataStore.getRepository()?.bindWeChatPhone(phoneNumber, verifyCode)
+                            verifying = false
+                            if (verified != null) onConfirm()
+                            else Toast.makeText(context, "验证失败，请检查验证码", Toast.LENGTH_LONG).show()
+                        }
                     } else {
                         Toast.makeText(context, "请输入正确的验证码", Toast.LENGTH_SHORT).show()
                     }
-                }
+                },
+                enabled = !verifying
             ) {
                 Text("验证")
             }

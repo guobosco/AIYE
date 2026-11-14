@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, JSON, BigInteger, Float, Text
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, JSON, BigInteger, Float, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 try:
     from .database import Base
@@ -40,7 +40,7 @@ class User(Base):
     
     # --- 个人资料 (Profile Info) ---
     # 头像 URL
-    photo_url = Column(String, nullable=True)
+    photo_url = Column(String, default="", nullable=True)
     # 资料照片墙
     profile_image_urls = Column(JSON, default=list)
     # 备注名
@@ -119,6 +119,51 @@ class User(Base):
     # 用户发布的服务与体验
     services = relationship("Service", back_populates="creator_user")
     experiences = relationship("Experience", back_populates="host_user")
+
+class AuthIdentity(Base):
+    __tablename__ = "auth_identities"
+    __table_args__ = (UniqueConstraint("provider", "subject", name="uq_auth_identity"),)
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), index=True, nullable=False)
+    provider = Column(String, nullable=False)
+    subject = Column(String, nullable=False)
+    verified_at = Column(BigInteger, nullable=False)
+
+
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), index=True, nullable=False)
+    refresh_hash = Column(String, unique=True, nullable=False)
+    previous_refresh_hash = Column(String, index=True, nullable=True)
+    created_at = Column(BigInteger, nullable=False)
+    expires_at = Column(BigInteger, nullable=False)
+    revoked_at = Column(BigInteger, default=0, nullable=False)
+
+
+class PhoneChallenge(Base):
+    __tablename__ = "phone_challenges"
+
+    key = Column(String, primary_key=True)
+    code_hash = Column(String, nullable=False)
+    scene = Column(String, nullable=False)
+    user_id = Column(String, nullable=False, default="")
+    trace_id = Column(String, nullable=False)
+    created_at = Column(BigInteger, nullable=False)
+    expires_at = Column(BigInteger, nullable=False)
+    attempts = Column(Integer, default=0, nullable=False)
+    consumed = Column(Boolean, default=False, nullable=False)
+
+
+class AuthRateLimit(Base):
+    __tablename__ = "auth_rate_limits"
+
+    key = Column(String, primary_key=True)
+    window_start = Column(BigInteger, nullable=False)
+    count = Column(Integer, default=0, nullable=False)
+
 
 class Service(Base):
     """

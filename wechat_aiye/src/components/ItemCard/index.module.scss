@@ -1,0 +1,18 @@
+@use '@/styles/variables.scss' as *;
+.card { width: 100%; min-width: 0; }
+.cover { position: relative; width: 100%; height: 400rpx; border-radius: 28rpx; overflow: hidden; background: $color-bg-page; }
+.image { width: 100%; height: 100%; }
+.badge { position: absolute; left: 16rpx; top: 16rpx; max-width: 250rpx; padding: 8rpx 16rpx; background: white; border-radius: 999rpx; font-size: 22rpx; @include text-ellipsis; }
+.favorite { position: absolute; right: 8rpx; top: 8rpx; display: flex; align-items: center; justify-content: center; width: 80rpx; height: 80rpx; font-size: 48rpx; color: white; text-shadow: 0 1rpx 6rpx rgba(0,0,0,.5); }
+.active { color: $color-primary; }
+.body { min-width: 0; }
+.title { display: block; font-size: 30rpx; line-height: 40rpx; font-weight: 600; margin-top: 16rpx; @include text-ellipsis-multi(2); }
+.meta { display: block; font-size: 24rpx; color: $color-text-secondary; line-height: 34rpx; margin-top: 8rpx; @include text-ellipsis; }
+.price { display: block; margin-top: 8rpx; color: $color-text-primary; font-size: 28rpx; }
+.row { display: flex; align-items: center; gap: 24rpx; padding: 24rpx 0; border-bottom: 1rpx solid $color-divider;
+  .cover { width: 160rpx; height: 160rpx; flex-shrink: 0; border-radius: 20rpx; }
+  .body { flex: 1; }
+  .title { margin-top: 0; font-size: 28rpx; }
+  .badge { display: none; }
+}
+.missing { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 24rpx; color: $color-text-secondary; }

@@ -6,11 +6,17 @@ from pydantic import BaseModel, Field, field_validator
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    refresh_token: str = ""
+    expires_in: int = 0
+    session_id: str = ""
 
 
 class AuthSessionResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    refresh_token: str = ""
+    expires_in: int = 0
+    session_id: str = ""
     user: "User"
     need_bind_phone: bool = False
     is_new_user: bool = False
@@ -86,6 +92,28 @@ class UserCreate(UserBase):
     # 通常由服务端生成，但为了同步方便，客户端可能提供。
     id: str 
     password: str 
+    verify_code: str = ""
+
+
+class UserUpdate(UserBase):
+    id: Optional[str] = None
+
+
+class RefreshSessionRequest(BaseModel):
+    refresh_token: str = Field(min_length=32, max_length=256)
+
+
+class PhoneLoginRequest(BaseModel):
+    phone_number: str
+    verify_code: str = Field(min_length=6, max_length=6)
+
+
+class OneKeyLoginRequest(BaseModel):
+    access_token: str = Field(min_length=1, max_length=4096)
+
+
+class MiniAppLoginRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=1024)
 
 class UserLogin(BaseModel):
     phone_number: str

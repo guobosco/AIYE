@@ -4,8 +4,8 @@ plugins {
     id("com.google.devtools.ksp") version "1.9.20-1.0.14"
 }
 
-// Default to the deployed backend to keep builds aligned with the shared server.
-val localApiBaseUrl = "http://123.57.67.153:8000/"
+// Use the Mac's LAN address for both emulators and physical devices.
+val localApiBaseUrl = "http://192.168.43.168:8000/"
 val devApiBaseUrl = providers.gradleProperty("DEV_API_BASE_URL").orElse(localApiBaseUrl).get()
 val prodApiBaseUrl = providers.gradleProperty("PROD_API_BASE_URL").orElse(localApiBaseUrl).get()
 

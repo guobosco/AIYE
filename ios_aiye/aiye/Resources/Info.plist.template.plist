@@ -6,6 +6,8 @@
 	<string>$(AIYE_BASE_URL)</string>
 	<key>AIYE_ALLOW_INSECURE_HTTPS</key>
 	<string>$(AIYE_ALLOW_INSECURE_HTTPS)</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>爱野需要连接同一局域网内的本地服务器，以加载数据和图片。</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
