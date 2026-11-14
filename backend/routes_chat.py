@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import and_, desc, or_
 from typing import List, Optional
 from starlette.concurrency import run_in_threadpool
 import time
@@ -53,16 +53,26 @@ def list_chat_messages(
     conversation_id: str,
     limit: int = Query(100, ge=1, le=500),
     before: Optional[int] = Query(None, ge=0),
+    before_id: Optional[str] = Query(None, min_length=1, max_length=128),
     db: Session = Depends(core.get_db),
     current_user: models.User = Depends(core.get_current_user)
 ):
     core.ensure_conversation_member(conversation_id, current_user, db)
+    if before_id is not None and before is None:
+        raise HTTPException(422, "before_id requires before")
     query = db.query(models.ChatMessage).filter(
         models.ChatMessage.conversation_id == conversation_id,
         models.ChatMessage.is_deleted == False
     )
     if before is not None:
-        query = query.filter(models.ChatMessage.created_at < before)
+        if before_id is None:
+            query = query.filter(models.ChatMessage.created_at < before)
+        else:
+            # Match the ordering key so equal-timestamp legacy messages remain pageable.
+            query = query.filter(or_(
+                models.ChatMessage.created_at < before,
+                and_(models.ChatMessage.created_at == before, models.ChatMessage.id < before_id),
+            ))
     items = query.order_by(desc(models.ChatMessage.created_at),
                            desc(models.ChatMessage.id)).limit(limit).all()
     return list(reversed(items))

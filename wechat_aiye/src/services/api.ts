@@ -263,18 +263,21 @@ export const getConversations = async () => {
 };
 export const createConversation = (peerId: string) =>
   request<ConversationItem>(`/chat/conversations/direct/${encodeURIComponent(peerId)}`, 'POST');
-export const getMessages = (id: string, before?: number) =>
-  request<ChatMessage[]>(`/chat/conversations/${encodeURIComponent(id)}/messages?limit=100${before ? `&before=${before}` : ''}`);
+export const getMessages = (id: string, before?: number, beforeId?: string) =>
+  request<ChatMessage[]>(`/chat/conversations/${encodeURIComponent(id)}/messages?limit=100${before === undefined ? ''
+    : `&before=${before}${beforeId ? `&before_id=${encodeURIComponent(beforeId)}` : ''}`}`);
 export const getConversationStarter = async (id: string): Promise<string> => {
   let oldest: ChatMessage | undefined;
-  let before: number | undefined;
+  let cursor: ChatMessage | undefined;
   for (let page = 0; page < 20; page++) {
-    const messages = await request<ChatMessage[]>(`/chat/conversations/${encodeURIComponent(id)}/messages?limit=500${before === undefined ? '' : `&before=${before}`}`);
+    const messages = await request<ChatMessage[]>(`/chat/conversations/${encodeURIComponent(id)}/messages?limit=500${!cursor ? ''
+      : `&before=${cursor.created_at}&before_id=${encodeURIComponent(cursor.id)}`}`);
     if (!messages.length) return oldest?.sender_id || '';
     oldest = messages[0];
     if (messages.length < 500) return oldest.sender_id;
-    if (before !== undefined && oldest.created_at >= before) break;
-    before = oldest.created_at;
+    if (cursor && (oldest.created_at > cursor.created_at
+      || (oldest.created_at === cursor.created_at && oldest.id >= cursor.id))) break;
+    cursor = oldest;
   }
   console.error('[Chat] Starter history exceeds classification limit');
   return '';

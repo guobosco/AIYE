@@ -2,13 +2,20 @@ import React, { useEffect, useRef, useState } from 'react';
 import Taro, { useDidHide, useDidShow } from '@tarojs/taro';
 import { Image, Input, ScrollView, Text, View } from '@tarojs/components';
 import classnames from 'classnames';
-import { API_BASE, getItem, getMessages, markRead, mediaUrl, request, sendMessage, showError, upload } from '@/services/api';
+import { API_BASE, getConversations, getItem, getMessages, markRead, mediaUrl, request, sendMessage, showError, upload } from '@/services/api';
 import { getSessionGeneration, requireLogin, useSession } from '@/store/session';
+import { useResource } from '@/hooks/useResource';
 import { onboardingDestination } from '@/utils/authentication';
 import { ActionButton, Avatar, StateView } from '@/components/UI';
 import { displayLocation, formatTime, itemUrl, uniqueId } from '@/utils/catalog';
-import type { ChatMessage, MessageInput, User } from '@/types/models';
+import { chatInquiryMeta, compareChatMessages } from '@/utils/chat';
+import type { CatalogItem, ChatMessage, ConversationItem, MessageInput, User } from '@/types/models';
 import styles from './index.module.scss';
+
+interface FailedSend {
+  body: MessageInput;
+  revision?: number;
+}
 
 export default function ThreadPage() {
   const params = Taro.getCurrentInstance().router?.params || {};
@@ -20,12 +27,12 @@ export default function ThreadPage() {
   latestKey.current = viewKey;
   const onboardingRoute = onboardingDestination(user);
   const [dataKey, setDataKey] = useState(viewKey);
-  const [peer, setPeer] = useState<User | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [failedSends, setFailedSends] = useState<FailedSend[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [visible, setVisible] = useState(false);
   const [scrollTarget, setScrollTarget] = useState('');
@@ -33,11 +40,43 @@ export default function ThreadPage() {
   const [windowHeight] = useState(() => Taro.getSystemInfoSync().windowHeight);
   const operation = useRef<{ key: string; generation: number } | null>(null);
   const textRevision = useRef(0);
+  const pendingText = useRef<FailedSend | null>(null);
+  const confirmedSends = useRef(new Set<string>());
   const nearBottom = useRef(true);
   const initialized = useRef(false);
   const refreshTask = useRef<{ key: string } | null>(null);
   const generation = useRef(0);
   const alive = useRef(true);
+  const canRead = !!token && !!user && !onboardingRoute && !!id;
+  const hostProfile = params.source === 'host_profile';
+  const serviceId = hostProfile ? '' : (params.service || '').trim();
+  const experienceId = hostProfile ? '' : (params.experience || '').trim();
+  const listingKind = serviceId ? 'service' : experienceId ? 'experience' : undefined;
+  const listingId = serviceId || experienceId;
+  const resourceKey = `${viewKey}.${canRead}`;
+  const conversation = useResource<ConversationItem | null>(async () => {
+    if (!canRead) return null;
+    return (await getConversations()).find(item => item.conversation.id === id) || null;
+  }, null, `${resourceKey}.${params.peer || ''}`);
+  const peerId = [params.peer, conversation.data?.peer?.id,
+    conversation.data?.conversation.participant_ids.find(value => value.trim() && value !== user?.id),
+    dataKey === viewKey ? messages.find(message => message.sender_id.trim() && message.sender_id !== user?.id)?.sender_id : undefined]
+    .find(value => value?.trim() && value.trim() !== user?.id)?.trim() || '';
+  const peerProfile = useResource<User | null>(async () => {
+    if (!canRead || !peerId) return null;
+    if (conversation.data?.peer?.id === peerId) return conversation.data.peer;
+    return request<User>(`/users/${encodeURIComponent(peerId)}`);
+  }, null, `${resourceKey}.${peerId}`);
+  const peer = conversation.data?.peer?.id === peerId ? conversation.data.peer
+    : peerProfile.data?.id === peerId ? peerProfile.data : null;
+  const linkedListing = useResource<CatalogItem | null>(async () =>
+    canRead && listingKind && listingId ? getItem(listingKind, listingId) : null,
+  null, `${resourceKey}.${listingKind || ''}.${listingId}`);
+  const title = peer?.name?.trim() || conversation.data?.conversation.title?.trim() || (peerId ? '对方' : '消息');
+  useEffect(() => {
+    if (!canRead) return;
+    void Taro.setNavigationBarTitle({ title }).catch(error => console.error('[Chat] Title update failed', error));
+  }, [viewKey, canRead, title]);
   useDidShow(() => setVisible(true));
   useDidHide(() => setVisible(false));
   useEffect(() => {
@@ -49,8 +88,17 @@ export default function ThreadPage() {
   const activeView = () => alive.current && latestKey.current === viewKey && getSessionGeneration() === loginGeneration;
   const merge = (next: ChatMessage[], scroll = true) => {
     if (!activeView()) return;
+    for (const message of next) {
+      if (message.sender_id === user?.id && message.client_message_id) confirmedSends.current.add(message.client_message_id);
+    }
+    setFailedSends(current => current.filter(failed => !confirmedSends.current.has(failed.body.client_message_id || '')));
+    const draft = pendingText.current;
+    if (draft && confirmedSends.current.has(draft.body.client_message_id || '')) {
+      if (draft.revision === textRevision.current) setText('');
+      pendingText.current = null;
+    }
     setMessages(current => [...new Map([...current, ...next].map(message => [message.id, message])).values()]
-      .filter(message => !message.is_deleted).sort((a, b) => a.created_at - b.created_at));
+      .filter(message => !message.is_deleted).sort(compareChatMessages));
     if (scroll && next.length && nearBottom.current) setScrollTarget(`message${next[next.length - 1].id.replace(/[^a-zA-Z0-9]/g, '')}`);
   };
   const load = async () => {
@@ -74,19 +122,15 @@ export default function ThreadPage() {
     }
   };
   useEffect(() => {
-    const currentGeneration = ++generation.current;
+    generation.current++;
     alive.current = true;
     initialized.current = false; nearBottom.current = true;
     operation.current = null; refreshTask.current = null; textRevision.current++;
-    setMessages([]); setPeer(null); setText(''); setBusy(false); setError('');
+    pendingText.current = null; confirmedSends.current.clear(); setFailedSends([]);
+    setMessages([]); setText(''); setBusy(false); setError('');
     setScrollTarget(''); setKeyboardHeight(0); setDataKey(viewKey); setLoading(true); setHasMore(false);
     if (token && user && onboardingRoute) requireLogin();
-    else if (token && user && id) {
-      void load();
-      if (params.peer) void request<User>(`/users/${encodeURIComponent(params.peer)}`).then(value => {
-        if (activeView() && currentGeneration === generation.current) { setPeer(value); void Taro.setNavigationBarTitle({ title: value.name || '聊天' }); }
-      }).catch(error => { if (activeView() && currentGeneration === generation.current) showError(error); });
-    }
+    else if (token && user && id) void load();
     return () => { alive.current = false; operation.current = null; };
   }, [viewKey, onboardingRoute, user?.id]);
   useEffect(() => {
@@ -125,15 +169,25 @@ export default function ThreadPage() {
     operation.current = null;
     if (activeView()) setBusy(false);
   };
-  const send = async (body: MessageInput, task: { key: string; generation: number }) => {
+  const send = async (body: MessageInput, task: { key: string; generation: number }, revision?: number) => {
     if (!currentOperation(task)) return false;
+    const payload = { ...body, client_message_id: body.client_message_id || uniqueId() };
     try {
-      const message = await sendMessage(id, { ...body, client_message_id: body.client_message_id || uniqueId() });
+      const message = await sendMessage(id, payload);
       if (!currentOperation(task)) return false;
+      confirmedSends.current.add(payload.client_message_id);
       nearBottom.current = true;
       merge([message]); setError('');
       return true;
-    } catch (err) { if (currentOperation(task)) showError(err); return false; }
+    } catch (err) {
+      if (!currentOperation(task)) return false;
+      // A live/REST confirmation may arrive even when the POST response is lost.
+      if (confirmedSends.current.has(payload.client_message_id)) return true;
+      setFailedSends(current => [...current.filter(failed => failed.body.client_message_id !== payload.client_message_id),
+        { body: payload, revision }]);
+      showError(err);
+      return false;
+    }
   };
   const sendText = async () => {
     const content = text.trim();
@@ -141,8 +195,19 @@ export default function ThreadPage() {
     const task = beginOperation();
     if (!task) return;
     const revision = textRevision.current;
+    if (pendingText.current?.revision !== revision || pendingText.current.body.content !== content) {
+      pendingText.current = { body: { type: 'text', content, client_message_id: uniqueId() }, revision };
+    }
     try {
-      if (await send({ type: 'text', content }, task) && currentOperation(task) && textRevision.current === revision) setText('');
+      if (await send(pendingText.current.body, task, revision) && currentOperation(task) && textRevision.current === revision) setText('');
+    } finally { finishOperation(task); }
+  };
+  const retrySend = async (failed: FailedSend) => {
+    const task = beginOperation();
+    if (!task) return;
+    try {
+      if (await send(failed.body, task, failed.revision) && currentOperation(task)
+        && failed.revision !== undefined && textRevision.current === failed.revision) setText('');
     } finally { finishOperation(task); }
   };
   const sendImage = async () => {
@@ -196,7 +261,7 @@ export default function ThreadPage() {
     if (!task) return;
     nearBottom.current = false;
     try {
-      const next = await getMessages(id, messages[0].created_at);
+      const next = await getMessages(id, messages[0].created_at, messages[0].id);
       if (!currentOperation(task)) return;
       merge(next, false); setHasMore(next.length === 100);
     } catch (error) { if (currentOperation(task)) showError(error); }
@@ -209,6 +274,16 @@ export default function ThreadPage() {
     <ActionButton onClick={requireLogin}>{onboardingRoute.includes('bind-phone') ? '去绑定手机号' : '去完善资料'}</ActionButton>
   </View>;
   if (!id) return <StateView error="未找到有效会话" />;
+  const service = linkedListing.data?.id === serviceId ? linkedListing.data : null;
+  const meta = chatInquiryMeta(messages, {
+    kind: listingKind, id: listingId, title: linkedListing.data?.title, date: params.inquiry_date,
+    createdAt: conversation.data?.conversation.created_at, hostProfile,
+  });
+  const serviceTitle = service?.title?.trim() || messages.find(message =>
+    message.extra?.service_id === serviceId)?.extra.title?.trim() || '当前咨询服务';
+  const serviceCover = service?.cover_image_url || service?.image_urls?.[0] || '';
+  const serviceSummary = [service?.price_text?.trim() || service?.price_basis_text?.trim(),
+    displayLocation(service?.location)].filter(Boolean).join(' · ');
   const openMessage = (message: ChatMessage) => {
     if (message.type === 'image' && message.attachment_url) {
       const url = mediaUrl(message.attachment_url);
@@ -225,8 +300,32 @@ export default function ThreadPage() {
   };
   return <View className={styles.page} style={process.env.TARO_ENV === 'weapp'
     ? { height: `${Math.max(200, windowHeight - keyboardHeight)}px` } : undefined}>
-    {peer && <View className={styles.header} onClick={() => Taro.navigateTo({ url: `/pages/profile/index?id=${encodeURIComponent(peer.id)}` })}>
-      <Avatar url={peer.photo_url} name={peer.name} size={64} /><Text className={styles.name}>{peer.name}</Text><Text>›</Text>
+    <View className={styles.header} onClick={() => {
+      if (peerId) void Taro.navigateTo({ url: `/pages/profile/index?id=${encodeURIComponent(peerId)}` });
+    }}>
+      <Avatar url={peer?.photo_url} name={title} size={64} /><Text className={styles.name}>{title}</Text>{peerId && <Text>›</Text>}
+    </View>
+    {(conversation.error || peerProfile.error) && <View className={styles.notice} onClick={() => {
+      if (conversation.error) void conversation.refresh();
+      if (peerProfile.error) void peerProfile.refresh();
+    }}>会话信息加载失败，点击重试</View>}
+    {serviceId && <View className={styles.pinnedSection}>
+      <View className={styles.pinnedCard} onClick={() => void Taro.navigateTo({ url: itemUrl('service', serviceId) })}>
+        {serviceCover ? <Image className={styles.pinnedCover} src={mediaUrl(serviceCover)} mode="aspectFill"
+          onError={() => console.error('[Chat] Context image failed')} />
+          : <View className={styles.pinnedFallback}><Text>服务</Text></View>}
+        <View className={styles.pinnedBody}>
+          <Text className={styles.pinnedLabel}>当前咨询服务</Text>
+          <Text className={styles.pinnedTitle}>{serviceTitle}</Text>
+          {serviceSummary ? <Text className={styles.pinnedSummary}>{serviceSummary}</Text>
+            : meta.date ? <Text className={styles.pinnedSummary}>{meta.summary}</Text>
+              : linkedListing.loading && <Text className={styles.pinnedSummary}>正在加载服务信息</Text>}
+        </View>
+        <Text className={styles.pinnedLink}>查看</Text>
+      </View>
+      {linkedListing.error && <View className={styles.notice} onClick={() => void linkedListing.refresh()}>
+        服务信息加载失败，点击重试
+      </View>}
     </View>}
     {error && <View className={styles.notice} onClick={() => void load()}>{error}，点击重试</View>}
     <ScrollView scrollY className={styles.history} scrollIntoView={scrollTarget}
@@ -236,6 +335,15 @@ export default function ThreadPage() {
         nearBottom.current = scrollHeight - scrollTop < viewport * 0.85;
       }} onScrollToLower={() => { nearBottom.current = true; }} lowerThreshold={100}>
       <View className={styles.list}><StateView loading={loading} />
+        {!serviceId && (meta.date || meta.summary || meta.id) && <View className={styles.consultationMeta}>
+          {meta.date && <Text className={styles.metaDate}>{meta.date}</Text>}
+          {meta.summary && <Text className={styles.metaSummary}>{meta.summary}</Text>}
+          {meta.id && meta.kind && <Text className={styles.metaLink}
+            onClick={() => { if (meta.kind) void Taro.navigateTo({ url: itemUrl(meta.kind, meta.id) }); }}>{meta.kind === 'experience' ? '显示体验' : '显示服务'}</Text>}
+          {experienceId && linkedListing.loading && <Text className={styles.cardMeta}>正在加载体验信息</Text>}
+          {experienceId && linkedListing.error && <Text className={styles.metaLink}
+            onClick={() => void linkedListing.refresh()}>体验信息加载失败，点击重试</Text>}
+        </View>}
         {hasMore && <Text className={styles.load} onClick={() => void loadHistory()}>加载更早消息</Text>}
         {messages.map((message, index) => <View key={message.id} id={`message${message.id.replace(/[^a-zA-Z0-9]/g, '')}`}>
           {(index === 0 || message.created_at - messages[index - 1].created_at > 300000) && <View className={styles.time}>{formatTime(message.created_at)}</View>}
@@ -256,6 +364,12 @@ export default function ThreadPage() {
                     : <Text>{message.content || message.attachment_name || '消息'}</Text>}
             </View>
           </View>
+        </View>)}
+        {failedSends.map(failed => <View key={failed.body.client_message_id} className={styles.failedSend}>
+          <Text className={styles.cardMeta}>消息未确认发送</Text>
+          <Text className={styles.failedPreview}>{failed.body.type === 'image' ? '图片'
+            : failed.body.type === 'location' ? '位置' : failed.body.content || '内容卡片'}</Text>
+          <ActionButton small disabled={busy} onClick={() => void retrySend(failed)}>重新发送</ActionButton>
         </View>)}
       </View>
     </ScrollView>

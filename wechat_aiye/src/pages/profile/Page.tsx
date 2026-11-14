@@ -34,7 +34,7 @@ export default function ProfilePage() {
     setBusy(true);
     try {
       const result = await createConversation(id);
-      void Taro.navigateTo({ url: `/pages/thread/index?id=${encodeURIComponent(result.conversation.id)}&peer=${encodeURIComponent(id)}` });
+      void Taro.navigateTo({ url: `/pages/thread/index?id=${encodeURIComponent(result.conversation.id)}&peer=${encodeURIComponent(id)}&source=host_profile` });
     } catch (error) { showError(error); }
     finally { setBusy(false); }
   };

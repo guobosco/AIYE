@@ -62,7 +62,7 @@ export default function PaymentPage() {
           inquiry_date: time, guest_count: guests, creator_id: host.id },
       });
       recordBooking(item, kind, scheduled, conversation.conversation.id, pending.current.messageId);
-      void Taro.redirectTo({ url: `/pages/thread/index?id=${encodeURIComponent(conversation.conversation.id)}&peer=${encodeURIComponent(host.id)}&${kind}=${encodeURIComponent(item.id)}` });
+      void Taro.redirectTo({ url: `/pages/thread/index?id=${encodeURIComponent(conversation.conversation.id)}&peer=${encodeURIComponent(host.id)}&${kind}=${encodeURIComponent(item.id)}&inquiry_date=${encodeURIComponent(time)}` });
     } catch (error) { showError(error); }
     finally { submitting.current = false; setBusy(false); }
   };

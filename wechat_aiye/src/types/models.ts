@@ -110,6 +110,7 @@ export interface Conversation {
   participant_ids: string[];
   last_message_preview: string;
   last_message_at: number;
+  created_at?: number;
 }
 export interface ConversationItem {
   conversation: Conversation;

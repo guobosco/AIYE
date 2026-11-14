@@ -37,6 +37,7 @@ const taro = {
   request: options => requestHandler(options),
   getCurrentInstance: () => ({ router: { params: routerParams } }),
   getSystemInfoSync: () => ({ windowHeight: 800 }),
+  setNavigationBarTitle: async () => {},
   onKeyboardHeightChange: callback => { keyboardListeners.add(callback); },
   offKeyboardHeightChange: callback => { keyboardListeners.delete(callback); },
   chooseImage: options => imagePicker(options),
@@ -551,10 +552,50 @@ const deferred = () => {
   check('successful favorite displays Android feedback text', () => assert.equal(toasts.at(-1), '已加入心愿单'));
   successfulCard.unmount();
   requestHandler = async options => options.url.includes('before=100')
-    ? response([{ created_at: 1, sender_id: 'starter' }])
-    : response(Array.from({ length: 500 }, (_, index) => ({ created_at: 100 + index, sender_id: 'recent' })));
+    ? response([{ id: 'oldest', created_at: 1, sender_id: 'starter' }])
+    : response(Array.from({ length: 500 }, (_, index) => ({ id: `message-${index}`, created_at: 100 + index, sender_id: 'recent' })));
   const starter = await api.getConversationStarter('conversation');
   check('inquiry classification reads earlier pages', () => assert.equal(starter, 'starter'));
+  let cursorUrl = '';
+  requestHandler = async options => { cursorUrl = options.url; return response([]); };
+  await api.getMessages('encoded/id', 0, 'boundary/id?');
+  check('history sends timestamp zero and URL-encoded tie-breaker ID', () => {
+    assert.ok(cursorUrl.includes('/encoded%2Fid/messages?limit=100&before=0&before_id=boundary%2Fid%3F'));
+  });
+  let sameTimePages = 0;
+  requestHandler = async options => {
+    sameTimePages++;
+    if (options.url.includes('&before_id=')) {
+      check('starter classification includes the same-timestamp message ID', () => assert.ok(options.url.includes('before_id=row-0500')));
+      return response([{ id: 'row-0001', created_at: 100, sender_id: 'true-starter' }]);
+    }
+    return response(Array.from({ length: 500 }, (_, index) => ({ id: `row-${String(500 + index).padStart(4, '0')}`, created_at: 100, sender_id: 'recent' })));
+  };
+  const sameTimeStarter = await api.getConversationStarter('same-time');
+  check('starter classification continues across equal timestamps', () => assert.equal(sameTimeStarter, 'true-starter'));
+  check('same-time classification completes in two requests', () => assert.equal(sameTimePages, 2));
+  const chatUtils = load('src/utils/chat.ts');
+  const linkedMessage = { extra: { experience_id: 'experience-1', title: '徒步体验', inquiry_date: '2030年5月1日' } };
+  check('experience consultation reads actual inquiry date and avoids duplicate suffix', () => assert.equal(
+    chatUtils.chatInquiryMeta([linkedMessage], {}).summary, '关于2030年5月1日徒步体验的咨询'));
+  check('new inquiry route date takes precedence over previous conversation inquiry', () => assert.equal(
+    chatUtils.chatInquiryMeta([linkedMessage], { kind: 'experience', id: 'experience-1', date: '2030年5月2日' }).date, '2030年5月2日'));
+  check('unrelated listing messages do not supply a consultation date', () => assert.equal(
+    chatUtils.chatInquiryMeta([linkedMessage], { kind: 'service', id: 'different-service' }).date, ''));
+  check('native start and end date extras supply the real consultation range', () => assert.equal(
+    chatUtils.chatInquiryMeta([{ extra: { service_id: 'service-1', start_date: '2030-01-01', end_date: '2030-01-03' } }], {}).date,
+    '2030-01-01至2030-01-03'));
+  check('host profile entry suppresses a previous consultation link and summary', () => {
+    const meta = chatUtils.chatInquiryMeta([linkedMessage], { hostProfile: true, createdAt: new Date(2030, 0, 2).getTime() });
+    assert.equal(meta.id, ''); assert.equal(meta.summary, ''); assert.equal(meta.date, '2030年1月2日');
+  });
+  check('missing conversation dates do not produce demo metadata', () => assert.deepEqual(
+    chatUtils.chatInquiryMeta([], {}), { kind: undefined, id: '', title: '', date: '', summary: '' }));
+  check('invalid conversation dates do not produce a fake date', () => assert.equal(
+    chatUtils.chatInquiryMeta([], { createdAt: Infinity }).date, ''));
+  check('equal-timestamp messages sort by ID, not arrival order', () => assert.deepEqual(
+    [{ id: 'z', created_at: 1 }, { id: 'a', created_at: 1 }, { id: 'b', created_at: 0 }]
+      .sort(chatUtils.compareChatMessages).map(message => message.id), ['b', 'a', 'z']));
   const logoutWait = deferred();
   requestHandler = () => logoutWait.promise;
   const loggingOut = api.logoutRemote();
@@ -823,17 +864,19 @@ const deferred = () => {
   };
   routerParams = { id: 'chat-test' };
   session.setSession('chat-unbound', unboundUser, 'refresh');
-  let chatReads = 0;
+  let chatReads = 0, chatMetadataReads = 0;
   const chatMessage = (id, content) => ({ id, content, conversation_id: 'chat-test', sender_id: readyUser.id,
     created_at: 1000, is_deleted: false, type: 'text', extra: {} });
   requestHandler = async options => {
-    if (options.method === 'GET') { chatReads++; return response([chatMessage('initial-chat', 'initial history')]); }
+    if (options.method === 'GET' && options.url.includes('/messages?')) { chatReads++; return response([chatMessage('initial-chat', 'initial history')]); }
+    if (options.method === 'GET') { chatMetadataReads++; return response([]); }
     return response({});
   };
   const threadRenderer = createRenderer(ThreadPage);
   let chatTree = threadRenderer.render();
   threadRenderer.show(); chatTree = threadRenderer.render();
   check('unbound direct chat entry has no history request', () => assert.equal(chatReads, 0));
+  check('unbound direct chat entry does not read account or service metadata', () => assert.equal(chatMetadataReads, 0));
   check('unbound direct chat entry has no socket or polling timer', () => {
     assert.equal(sockets.length, 0); assert.equal(chatIntervals.size, 0);
   });
@@ -878,7 +921,7 @@ const deferred = () => {
   check('successful chat send releases the shared operation lock', () => assert.equal(action(chatTree, '发送').props.loading, false));
   check('plain chat messages use the separate Android text bubble style', () => assert.ok(
     nodes(chatTree).some(node => node.type === 'View' && node.props.className?.includes('textBubble'))));
-  const chatStyles = fs.readFileSync(path.join(root, 'src/pages/thread/index.module.scss'), 'utf8');
+  const chatStyles = fs.readFileSync(path.join(__dirname, 'src/pages/thread/index.module.scss'), 'utf8');
   check('chat text bubble stylesheet matches Android sender and receiver colors', () => {
     assert.match(chatStyles, /\.textBubble\s*\{\s*background:\s*#EFEFEF/);
     assert.match(chatStyles, /\.mine\s+\.textBubble\s*\{\s*background:\s*#3B3D43/);
@@ -927,22 +970,24 @@ const deferred = () => {
   threadRenderer.unmount();
   check('chat unmount removes keyboard callbacks', () => assert.equal(keyboardListeners.size, 0));
   const historyRenderer = createRenderer(ThreadPage);
-  requestHandler = async options => options.method === 'GET'
+  requestHandler = async options => options.method === 'GET' && options.url.includes('/messages?')
     ? response(Array.from({ length: 100 }, (_, index) => ({ ...chatMessage(`history-${index}`, `history ${index}`), created_at: 1000 + index })))
-    : response({});
+    : response(options.method === 'GET' ? [] : {});
   historyRenderer.render();
   await flushCallbacks();
   let historyTree = historyRenderer.render();
   const historyStarted = deferred(), historyWait = deferred();
-  let historyReads = 0;
+  let historyReads = 0, historyRequest = '';
   requestHandler = async options => {
-    if (options.url.includes('&before=')) { historyReads++; historyStarted.resolve(); return historyWait.promise; }
+    if (options.url.includes('&before=')) { historyReads++; historyRequest = options.url; historyStarted.resolve(); return historyWait.promise; }
     return response([]);
   };
   const historyClick = nodes(historyTree).find(node => node.type === 'Text' && node.props.children.includes('加载更早消息')).props.onClick;
   historyClick(); historyClick();
   await historyStarted.promise;
   check('same-render history clicks request one page', () => assert.equal(historyReads, 1));
+  check('thread history supplies both oldest timestamp and oldest ID', () => assert.ok(
+    historyRequest.includes('&before=1000&before_id=history-0')));
   session.setSession('history-new-login', readyUser, 'refresh');
   check('re-login hides old history before the new request completes', () => assert.equal(historyRenderer.render().props.loading, true));
   await flushCallbacks();
@@ -972,7 +1017,8 @@ const deferred = () => {
   const feedWait = deferred();
   let feedReads = 0;
   requestHandler = async options => {
-    if (options.method === 'GET') { feedReads++; return feedWait.promise; }
+    if (options.method === 'GET' && options.url.includes('/messages?')) { feedReads++; return feedWait.promise; }
+    if (options.method === 'GET') return response([]);
     return response({});
   };
   const feedRenderer = createRenderer(ThreadPage);
@@ -996,6 +1042,326 @@ const deferred = () => {
   feedRenderer.unmount();
   check('all chat tests clean up keyboard and timer subscriptions', () => {
     assert.equal(keyboardListeners.size, 0); assert.equal(chatIntervals.size, 0);
+  });
+  const otherUser = { ...readyUser, id: 'chat-peer', name: 'Actual peer' };
+  const actualService = { id: 'context-service', title: 'Actual service', price_text: '¥120',
+    location: '北京|||PEIPEI_GEO1|||metadata', cover_image_url: '/static/context.jpg', image_urls: [] };
+  const metadata = { conversation: { id: 'chat-test', title: 'Actual conversation',
+    participant_ids: [readyUser.id, otherUser.id] }, peer: otherUser };
+  const hasText = (tree, text) => nodes(tree).some(node => node.props.children.includes(text));
+  routerParams = { id: 'chat-test', service: actualService.id };
+  session.setSession('context-login', readyUser, 'refresh');
+  const contextWait = deferred();
+  let profileReads = 0;
+  requestHandler = async options => {
+    if (options.url.includes('/chat/conversations?')) return response([metadata]);
+    if (options.url.endsWith(`/services/${actualService.id}`)) return contextWait.promise;
+    if (options.url.includes('/users/')) { profileReads++; return response(otherUser); }
+    return response(options.method === 'GET' ? [] : {});
+  };
+  const contextRenderer = createRenderer(ThreadPage);
+  let contextTree = contextRenderer.render();
+  check('service context card is outside the scrolling history', () => assert.ok(
+    contextTree.props.children.some(child => child?.props?.className === 'pinnedSection')));
+  check('loading context shows no fabricated price or date', () => {
+    assert.ok(hasText(contextTree, '正在加载服务信息'));
+    assert.ok(!hasText(contextTree, '¥120'));
+    assert.ok(!hasText(contextTree, '2021年2月9日至19日'));
+  });
+  await flushCallbacks();
+  contextTree = contextRenderer.render();
+  await flushCallbacks();
+  contextTree = contextRenderer.render();
+  check('direct conversation entry recovers its peer from the existing API', () => assert.ok(hasText(contextTree, otherUser.name)));
+  check('conversation-provided peer does not require another profile request', () => assert.equal(profileReads, 0));
+  contextWait.resolve(response(actualService));
+  await flushCallbacks();
+  contextTree = contextRenderer.render();
+  check('pinned card displays the server service title', () => assert.ok(hasText(contextTree, actualService.title)));
+  check('pinned card displays price and strips encoded map metadata', () => assert.ok(hasText(contextTree, '¥120 · 北京')));
+  check('pinned card uses the real service cover', () => assert.ok(
+    nodes(contextTree).some(node => node.type === 'Image' && node.props.src.endsWith('/static/context.jpg'))));
+  const pinned = nodes(contextTree).find(node => node.props.className === 'pinnedCard');
+  pinned.props.onClick();
+  await flushCallbacks();
+  check('pinned service card opens its linked detail', () => assert.equal(
+    navigations.at(-1), 'open:/pages/service-detail/index?id=context-service'));
+  nodes(contextTree).find(node => node.props.className === 'header').props.onClick();
+  await flushCallbacks();
+  check('hydrated header opens the actual peer profile', () => assert.equal(navigations.at(-1), 'open:/pages/profile/index?id=chat-peer'));
+  contextRenderer.unmount();
+
+  routerParams = { id: 'chat-test' };
+  let inferredReads = 0;
+  requestHandler = async options => {
+    if (options.url.includes('/chat/conversations?')) return response([]);
+    if (options.url.includes('/users/')) { inferredReads++; return response(otherUser); }
+    if (options.url.includes('/messages?')) return response([{ ...chatMessage('peer-message', 'peer history'), sender_id: otherUser.id }]);
+    return response({});
+  };
+  const inferredRenderer = createRenderer(ThreadPage);
+  inferredRenderer.render();
+  await flushCallbacks();
+  inferredRenderer.render();
+  await flushCallbacks();
+  const inferredTree = inferredRenderer.render();
+  check('message sender supplies a peer when conversation metadata is missing', () => {
+    assert.equal(inferredReads, 1); assert.ok(hasText(inferredTree, otherUser.name));
+  });
+  check('ordinary message entry has no fabricated pinned service card', () => assert.ok(
+    !nodes(inferredTree).some(node => node.props.className === 'pinnedCard')));
+  inferredRenderer.unmount();
+  requestHandler = async options => {
+    if (options.url.includes('/chat/conversations?')) return response([{ conversation: metadata.conversation }]);
+    if (options.url.includes('/users/')) return response(otherUser);
+    return response(options.method === 'GET' ? [] : {});
+  };
+  const memberRenderer = createRenderer(ThreadPage);
+  memberRenderer.render();
+  await flushCallbacks();
+  memberRenderer.render();
+  await flushCallbacks();
+  const memberTree = memberRenderer.render();
+  check('conversation member IDs hydrate a peer even with empty message history', () => assert.ok(hasText(memberTree, otherUser.name)));
+  memberRenderer.unmount();
+
+  routerParams = { id: 'chat-test', service: actualService.id, peer: otherUser.id };
+  const staleContextWait = deferred(), stalePeerWait = deferred();
+  requestHandler = async options => {
+    if (options.url.includes('/services/')) return staleContextWait.promise;
+    if (options.url.includes('/users/')) return stalePeerWait.promise;
+    return response(options.method === 'GET' ? [] : {});
+  };
+  const staleContextRenderer = createRenderer(ThreadPage);
+  staleContextRenderer.render();
+  session.setSession('replacement-context-login', readyUser, 'refresh');
+  requestHandler = async options => {
+    if (options.url.includes('/services/')) return response({ ...actualService, title: 'Replacement service' });
+    if (options.url.includes('/users/')) return response({ ...otherUser, name: 'Replacement peer' });
+    return response(options.method === 'GET' ? [] : {});
+  };
+  check('re-login immediately hides old service and peer data', () => assert.equal(staleContextRenderer.render().props.loading, true));
+  await flushCallbacks();
+  staleContextWait.resolve(response(actualService));
+  stalePeerWait.resolve(response(otherUser));
+  await flushCallbacks();
+  const replacementContextTree = staleContextRenderer.render();
+  check('old service result cannot overwrite replacement login context', () => {
+    assert.ok(hasText(replacementContextTree, 'Replacement service'));
+    assert.ok(!hasText(replacementContextTree, actualService.title));
+  });
+  check('old peer result cannot overwrite replacement login profile', () => {
+    assert.ok(hasText(replacementContextTree, 'Replacement peer'));
+    assert.ok(!hasText(replacementContextTree, otherUser.name));
+  });
+  staleContextRenderer.unmount();
+
+  let contextAttempts = 0;
+  requestHandler = async options => {
+    if (options.url.includes('/services/')) {
+      contextAttempts++;
+      return contextAttempts === 1 ? response({ detail: 'Context unavailable' }, 503) : response(actualService);
+    }
+    if (options.url.includes('/users/')) return response(otherUser);
+    return response(options.method === 'GET' ? [] : {});
+  };
+  const retryContextRenderer = createRenderer(ThreadPage);
+  retryContextRenderer.render();
+  await flushCallbacks();
+  let retryContextTree = retryContextRenderer.render();
+  check('failed context read has an explicit retry rather than fake content', () => {
+    assert.ok(hasText(retryContextTree, '服务信息加载失败，点击重试'));
+    assert.ok(!hasText(retryContextTree, actualService.title));
+  });
+  nodes(retryContextTree).find(node => node.props.children.includes('服务信息加载失败，点击重试')).props.onClick();
+  await flushCallbacks();
+  retryContextTree = retryContextRenderer.render();
+  check('context retry uses the same real API and clears its error', () => {
+    assert.equal(contextAttempts, 2); assert.ok(hasText(retryContextTree, actualService.title));
+    assert.ok(!hasText(retryContextTree, '服务信息加载失败，点击重试'));
+  });
+  retryContextRenderer.unmount();
+  let peerAttempts = 0;
+  requestHandler = async options => {
+    if (options.url.includes('/users/')) {
+      peerAttempts++;
+      return peerAttempts === 1 ? response({ detail: 'Peer unavailable' }, 503) : response(otherUser);
+    }
+    if (options.url.includes('/services/')) return response(actualService);
+    return response(options.method === 'GET' ? [] : {});
+  };
+  const retryPeerRenderer = createRenderer(ThreadPage);
+  retryPeerRenderer.render();
+  await flushCallbacks();
+  let retryPeerTree = retryPeerRenderer.render();
+  check('failed peer read preserves a usable conversation and explicit retry', () => {
+    assert.ok(hasText(retryPeerTree, '会话信息加载失败，点击重试'));
+    assert.ok(nodes(retryPeerTree).some(node => node.type === 'Input'));
+    assert.ok(hasText(retryPeerTree, '对方'));
+  });
+  nodes(retryPeerTree).find(node => node.props.children.includes('会话信息加载失败，点击重试')).props.onClick();
+  await flushCallbacks();
+  retryPeerTree = retryPeerRenderer.render();
+  check('peer retry restores the actual header without reloading the conversation', () => {
+    assert.equal(peerAttempts, 2); assert.ok(hasText(retryPeerTree, otherUser.name));
+    assert.ok(!hasText(retryPeerTree, '会话信息加载失败，点击重试'));
+  });
+  retryPeerRenderer.unmount();
+  routerParams = { id: 'chat-test', service: actualService.id, source: 'host_profile' };
+  let hostServiceReads = 0;
+  requestHandler = async options => {
+    if (options.url.includes('/services/')) { hostServiceReads++; return response(actualService); }
+    return response(options.method === 'GET' ? [] : {});
+  };
+  const hostRenderer = createRenderer(ThreadPage);
+  const hostTree = hostRenderer.render();
+  await flushCallbacks();
+  check('host profile entry suppresses service consultation context as Android does', () => {
+    assert.equal(hostServiceReads, 0);
+    assert.ok(!nodes(hostTree).some(node => node.props.className === 'pinnedCard'));
+  });
+  hostRenderer.unmount();
+  routerParams = { id: 'chat-test', experience: 'experience-context', inquiry_date: '2030年5月2日' };
+  requestHandler = async options => {
+    if (options.url.includes('/experiences/')) return response({ id: 'experience-context', title: '徒步体验' });
+    return response(options.method === 'GET' ? [] : {});
+  };
+  const experienceRenderer = createRenderer(ThreadPage);
+  const experienceTree = experienceRenderer.render();
+  check('experience entry does not invent an Android pinned service card', () => assert.ok(
+    !nodes(experienceTree).some(node => node.props.className === 'pinnedCard')));
+  await flushCallbacks();
+  const readyExperienceTree = experienceRenderer.render();
+  check('experience inquiry renders actual listing title and requested date', () => assert.ok(
+    hasText(readyExperienceTree, '关于2030年5月2日徒步体验的咨询')));
+  nodes(readyExperienceTree).find(node => node.props.children.includes('显示体验')).props.onClick();
+  await flushCallbacks();
+  check('experience consultation link opens the actual experience detail', () => assert.equal(
+    navigations.at(-1), 'open:/pages/experience-detail/index?id=experience-context'));
+  experienceRenderer.unmount();
+  routerParams = { id: 'chat-test' };
+  session.setSession('retry-message-login', readyUser, 'refresh');
+  const retryBodies = [];
+  requestHandler = async options => {
+    if (options.method === 'POST' && options.url.endsWith('/messages')) {
+      retryBodies.push(options.data);
+      return retryBodies.length === 1 ? response({ detail: 'Temporary failure' }, 503)
+        : response({ ...chatMessage('retried-text', options.data.content), client_message_id: options.data.client_message_id });
+    }
+    return response(options.method === 'GET' ? [] : {});
+  };
+  const retrySendRenderer = createRenderer(ThreadPage);
+  retrySendRenderer.render();
+  await flushCallbacks();
+  let retrySendTree = retrySendRenderer.render();
+  nodes(retrySendTree).find(node => node.type === 'Input').props.onInput({ detail: { value: 'retry this text' } });
+  retrySendTree = retrySendRenderer.render();
+  action(retrySendTree, '发送').props.onClick();
+  await flushCallbacks();
+  retrySendTree = retrySendRenderer.render();
+  check('failed text is visibly unconfirmed with an explicit resend action', () => {
+    assert.ok(hasText(retrySendTree, '消息未确认发送')); assert.ok(action(retrySendTree, '重新发送'));
+  });
+  const resendClick = action(retrySendTree, '重新发送').props.onClick;
+  resendClick(); resendClick();
+  await flushCallbacks();
+  retrySendTree = retrySendRenderer.render();
+  check('same-render resend submits once with the exact original payload', () => {
+    assert.equal(retryBodies.length, 2); assert.deepEqual(retryBodies[1], retryBodies[0]);
+  });
+  check('successful resend removes unconfirmed state and clears unchanged input', () => {
+    assert.ok(!hasText(retrySendTree, '消息未确认发送'));
+    assert.equal(nodes(retrySendTree).find(node => node.type === 'Input').props.value, '');
+  });
+  const changedDraftBodies = [];
+  requestHandler = async options => {
+    if (options.method === 'POST' && options.url.endsWith('/messages')) {
+      changedDraftBodies.push(options.data);
+      return changedDraftBodies.length === 1 ? response({ detail: 'Temporary failure' }, 503)
+        : response({ ...chatMessage('retried-old-draft', options.data.content), client_message_id: options.data.client_message_id });
+    }
+    return response(options.method === 'GET' ? [] : {});
+  };
+  nodes(retrySendTree).find(node => node.type === 'Input').props.onInput({ detail: { value: 'old failed draft' } });
+  retrySendTree = retrySendRenderer.render();
+  action(retrySendTree, '发送').props.onClick();
+  await flushCallbacks();
+  retrySendTree = retrySendRenderer.render();
+  nodes(retrySendTree).find(node => node.type === 'Input').props.onInput({ detail: { value: 'new draft to retain' } });
+  retrySendTree = retrySendRenderer.render();
+  action(retrySendTree, '重新发送').props.onClick();
+  await flushCallbacks();
+  retrySendTree = retrySendRenderer.render();
+  check('retrying an older failed text preserves a newer input draft', () => assert.equal(
+    nodes(retrySendTree).find(node => node.type === 'Input').props.value, 'new draft to retain'));
+  check('older failed text retry reuses its own message key', () => assert.deepEqual(changedDraftBodies[0], changedDraftBodies[1]));
+  let retryUploads = 0;
+  const imageBodies = [];
+  imagePicker = async () => ({ tempFilePaths: ['/tmp/retry-chat-image.jpg'] });
+  uploadHandler = async () => {
+    retryUploads++;
+    return { statusCode: 200, data: JSON.stringify({ url: '/static/retry-image.jpg', object_key: 'retry-object' }) };
+  };
+  requestHandler = async options => {
+    if (options.method === 'POST' && options.url.endsWith('/messages')) {
+      imageBodies.push(options.data);
+      return imageBodies.length === 1 ? response({ detail: 'Temporary failure' }, 503)
+        : response({ ...chatMessage('retried-image', '图片'), type: 'image', attachment_url: options.data.attachment_url,
+          client_message_id: options.data.client_message_id });
+    }
+    return response(options.method === 'GET' ? [] : {});
+  };
+  nodes(retrySendTree).find(node => node.type === 'Text' && node.props.children.includes('图片')).props.onClick();
+  await flushCallbacks();
+  retrySendTree = retrySendRenderer.render();
+  action(retrySendTree, '重新发送').props.onClick();
+  await flushCallbacks();
+  retrySendTree = retrySendRenderer.render();
+  check('image resend does not reupload an already uploaded attachment', () => assert.equal(retryUploads, 1));
+  check('image resend preserves its message key and attachment metadata', () => assert.deepEqual(imageBodies[0], imageBodies[1]));
+  check('image resend does not erase the current text draft', () => assert.equal(
+    nodes(retrySendTree).find(node => node.type === 'Input').props.value, 'new draft to retain'));
+  requestHandler = async options => options.method === 'POST' && options.url.endsWith('/messages')
+    ? response({ detail: 'Temporary failure' }, 503) : response(options.method === 'GET' ? [] : {});
+  action(retrySendTree, '发送').props.onClick();
+  await flushCallbacks();
+  check('new failure is kept until confirmed or account changes', () => assert.ok(hasText(retrySendRenderer.render(), '消息未确认发送')));
+  session.setSession('retry-message-replacement-login', readyUser, 'refresh');
+  retrySendRenderer.render();
+  await flushCallbacks();
+  check('same-account re-login clears old resend actions', () => assert.ok(!hasText(retrySendRenderer.render(), '消息未确认发送')));
+  retrySendRenderer.unmount();
+
+  const liveSendWait = deferred();
+  let liveSendBody;
+  requestHandler = async options => {
+    if (options.method === 'POST' && options.url.endsWith('/messages')) { liveSendBody = options.data; return liveSendWait.promise; }
+    return response(options.method === 'GET' ? [] : {});
+  };
+  const liveConfirmationRenderer = createRenderer(ThreadPage);
+  liveConfirmationRenderer.render(); liveConfirmationRenderer.show(); liveConfirmationRenderer.render();
+  await flushCallbacks();
+  let liveConfirmationTree = liveConfirmationRenderer.render();
+  nodes(liveConfirmationTree).find(node => node.type === 'Input').props.onInput({ detail: { value: 'confirmed before response' } });
+  liveConfirmationTree = liveConfirmationRenderer.render();
+  action(liveConfirmationTree, '发送').props.onClick();
+  await flushCallbacks();
+  const beforeLostResponse = toasts.length;
+  sockets.at(-1).message({ data: JSON.stringify({ type: 'message', message: {
+    ...chatMessage('live-confirmed-send', liveSendBody.content), client_message_id: liveSendBody.client_message_id,
+  } }) });
+  liveSendWait.reject(new Error('Response lost after persistence'));
+  await flushCallbacks();
+  liveConfirmationTree = liveConfirmationRenderer.render();
+  check('live confirmation prevents a lost POST response from creating a false resend', () => {
+    assert.ok(!hasText(liveConfirmationTree, '消息未确认发送'));
+    assert.equal(toasts.length, beforeLostResponse);
+  });
+  check('confirmed delivery still clears only its own draft', () => assert.equal(
+    nodes(liveConfirmationTree).find(node => node.type === 'Input').props.value, ''));
+  liveConfirmationRenderer.unmount();
+  check('new retry and context tests clean up timers and keyboard subscriptions', () => {
+    assert.equal(chatIntervals.size, 0); assert.equal(keyboardListeners.size, 0);
   });
   intervals = { setInterval, clearInterval };
   routerParams = {};

@@ -1179,12 +1179,14 @@ class LuluRepository(
         return chatMessageDao.getFirstMessageByConversation(conversationId, userId)?.senderId.orEmpty()
     }
 
-    suspend fun fetchAndSyncMessages(conversationId: String, before: Long? = null) {
+    suspend fun fetchAndSyncMessages(conversationId: String, before: Long? = null, beforeId: String? = null) {
         val userId = currentUserId
         if (userId.isBlank()) return
         withContext(Dispatchers.IO) {
             try {
-                val items = apiService?.getChatMessages(conversationId, before = before) ?: emptyList()
+                val items = apiService?.getChatMessages(
+                    conversationId, before = before, beforeId = beforeId.takeIf { before != null }
+                ) ?: emptyList()
                 if (before == null) {
                     chatMessageDao.deleteMessagesByConversation(conversationId, userId)
                 }

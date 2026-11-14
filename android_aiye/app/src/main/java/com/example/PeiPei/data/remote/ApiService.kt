@@ -188,7 +188,8 @@ interface ApiService {
     suspend fun getChatMessages(
         @Path("conversationId") conversationId: String,
         @Query("limit") limit: Int = 100,
-        @Query("before") before: Long? = null
+        @Query("before") before: Long? = null,
+        @Query("before_id") beforeId: String? = null
     ): List<ChatMessage>
 
     @POST("chat/conversations/{conversationId}/messages")

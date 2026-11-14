@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ChatMessageDao {
-    @Query("SELECT * FROM chat_messages WHERE conversationId = :conversationId AND currentUserId = :currentUserId ORDER BY createdAt ASC")
+    @Query("SELECT * FROM chat_messages WHERE conversationId = :conversationId AND currentUserId = :currentUserId ORDER BY createdAt ASC, id ASC")
     fun getMessages(conversationId: String, currentUserId: String): Flow<List<ChatMessage>>
 
     @Query("SELECT * FROM chat_messages WHERE id = :messageId AND currentUserId = :currentUserId LIMIT 1")
@@ -20,7 +20,7 @@ interface ChatMessageDao {
     @Query(
         "SELECT * FROM chat_messages " +
             "WHERE conversationId = :conversationId AND currentUserId = :currentUserId " +
-            "ORDER BY createdAt DESC, updatedAt DESC LIMIT 1"
+            "ORDER BY createdAt DESC, id DESC LIMIT 1"
     )
     suspend fun getLatestMessageByConversation(
         conversationId: String,
@@ -30,7 +30,7 @@ interface ChatMessageDao {
     @Query(
         "SELECT * FROM chat_messages " +
             "WHERE conversationId = :conversationId AND currentUserId = :currentUserId " +
-            "ORDER BY createdAt ASC, updatedAt ASC LIMIT 1"
+            "ORDER BY createdAt ASC, id ASC LIMIT 1"
     )
     suspend fun getFirstMessageByConversation(
         conversationId: String,

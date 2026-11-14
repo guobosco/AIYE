@@ -69,6 +69,45 @@ class BackendOptimizationTests(unittest.TestCase):
             self.assertEqual(db.query(models.ConversationMember).filter_by(
                 conversation_id=conversation, user_id=peer).one().unread_count, 1)
 
+    def test_message_cursor_pages_equal_timestamp_legacy_rows(self):
+        owner, peer, conversation, headers = self.conversation()
+        prefix = uuid.uuid4().hex
+        expected = [f"{prefix}-{index:03d}" for index in range(205)]
+        with core.SessionLocal() as db:
+            for index, message_id in enumerate(expected):
+                db.add(models.ChatMessage(
+                    id=message_id, conversation_id=conversation, sender_id=owner,
+                    type="text", content=str(index), extra={}, created_at=1000,
+                    updated_at=1000, is_deleted=False,
+                ))
+            db.add(models.ChatMessage(
+                id=f"{prefix}-deleted", conversation_id=conversation, sender_id=owner,
+                type="text", content="deleted", extra={}, created_at=1000,
+                updated_at=1000, is_deleted=True,
+            ))
+            db.commit()
+        path = f"/chat/conversations/{conversation}/messages"
+        collected = []
+        cursor = {}
+        for _ in range(4):
+            response = self.client.get(path, params={"limit": 100, **cursor}, headers=headers)
+            self.assertEqual(response.status_code, 200, response.text)
+            page = response.json()
+            if not page:
+                break
+            self.assertEqual([item["id"] for item in page], sorted(item["id"] for item in page))
+            collected = [item["id"] for item in page] + collected
+            cursor = {"before": page[0]["created_at"], "before_id": page[0]["id"]}
+        self.assertEqual(collected, expected)
+        self.assertEqual(len(set(collected)), 205)
+        legacy = self.client.get(path, params={"before": 1000}, headers=headers)
+        self.assertEqual(legacy.status_code, 200)
+        self.assertEqual(legacy.json(), [])
+        self.assertEqual(self.client.get(path, params={"before_id": expected[0]}, headers=headers).status_code, 422)
+        self.assertEqual(self.client.get(path, params={"before": 1000, "before_id": ""}, headers=headers).status_code, 422)
+        _, outsider_headers = self.login("199" + str(uuid.uuid4().int % 100000000).zfill(8))
+        self.assertEqual(self.client.get(path, params=cursor, headers=outsider_headers).status_code, 403)
+
     def test_concurrent_retries_and_distinct_messages_keep_unread_counts(self):
         owner, peer, conversation, headers = self.conversation()
         path = f"/chat/conversations/{conversation}/messages"

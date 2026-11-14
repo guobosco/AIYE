@@ -1,12 +1,27 @@
 @use '@/styles/variables.scss' as *;
 .page { height: 100vh; display: flex; flex-direction: column; background: $color-bg-card; }
 .header { display: flex; align-items: center; gap: 16rpx; padding: 16rpx 32rpx; background: white; flex-shrink: 0; }
-.name { font-size: 28rpx; font-weight: 600; flex: 1; }
+.name { font-size: 28rpx; font-weight: 600; flex: 1; min-width: 0; @include text-ellipsis; }
+.pinnedSection { flex-shrink: 0; padding: 20rpx 28rpx; }
+.pinnedCard { display: flex; align-items: center; gap: 24rpx; padding: 28rpx; border-radius: 40rpx; background: $color-bg-card; box-shadow: 0 8rpx 28rpx rgba(0, 0, 0, 0.1); @include interactive; }
+.pinnedCover, .pinnedFallback { width: 136rpx; height: 136rpx; border-radius: 28rpx; flex-shrink: 0; }
+.pinnedFallback { display: flex; align-items: center; justify-content: center; background: #FFF0E4; color: #FF7A00; font-size: 24rpx; }
+.pinnedBody { flex: 1; min-width: 0; }
+.pinnedLabel { display: block; color: #8A8A8A; font-size: 24rpx; }
+.pinnedTitle { color: #222222; font-size: 32rpx; font-weight: 600; margin-top: 8rpx; @include text-ellipsis-multi(2); }
+.pinnedSummary { color: #666666; font-size: 24rpx; margin-top: 8rpx; @include text-ellipsis-multi(2); }
+.pinnedLink { flex-shrink: 0; font-size: 26rpx; color: #3B3B3B; text-decoration: underline; white-space: nowrap; }
+.consultationMeta { padding: 0 16rpx 24rpx; text-align: center; }
+.metaDate { display: block; font-size: 28rpx; color: #4F4F4F; overflow-wrap: anywhere; }
+.metaSummary { display: block; margin-top: 16rpx; font-size: 28rpx; color: #6D6D6D; overflow-wrap: anywhere; }
+.metaLink { display: block; padding: 24rpx 16rpx; font-size: 28rpx; color: #3B3B3B; text-decoration: underline; @include interactive; }
+.failedSend { margin: 24rpx 0; padding: 24rpx; border: 2rpx solid $color-border; border-radius: 24rpx; }
+.failedPreview { display: block; margin: 8rpx 0 16rpx; font-size: 28rpx; @include text-ellipsis-multi(2); }
 .history { flex: 1; min-height: 0; height: 0; }
 .list { padding: 24rpx 32rpx; }
 .row { display: flex; align-items: flex-start; gap: 20rpx; margin: 36rpx 0; }
 .mine { flex-direction: row-reverse; }
-.bubble { max-width: 500rpx; padding: 24rpx 32rpx; background: $color-bg-card; border-radius: 36rpx; font-size: 32rpx; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bubble { min-width: 0; max-width: 500rpx; padding: 24rpx 32rpx; background: $color-bg-card; border-radius: 36rpx; font-size: 32rpx; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .textBubble { background: #EFEFEF; color: #222222; }
 .mine .textBubble { background: #3B3D43; color: $color-text-inverse; }
 .mine .locationBubble { background: #DDF5C8; }
