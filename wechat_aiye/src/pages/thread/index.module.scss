@@ -1,13 +1,15 @@
 @use '@/styles/variables.scss' as *;
-.page { height: 100vh; display: flex; flex-direction: column; background: #f5f4f2; }
+.page { height: 100vh; display: flex; flex-direction: column; background: $color-bg-card; }
 .header { display: flex; align-items: center; gap: 16rpx; padding: 16rpx 32rpx; background: white; flex-shrink: 0; }
 .name { font-size: 28rpx; font-weight: 600; flex: 1; }
 .history { flex: 1; min-height: 0; height: 0; }
 .list { padding: 24rpx 32rpx; }
-.row { display: flex; align-items: flex-start; gap: 16rpx; margin: 24rpx 0; }
+.row { display: flex; align-items: flex-start; gap: 20rpx; margin: 36rpx 0; }
 .mine { flex-direction: row-reverse; }
-.bubble { max-width: 500rpx; padding: 20rpx 24rpx; background: white; border-radius: 20rpx; font-size: 28rpx; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
-.mine .bubble { background: $color-primary-container; }
+.bubble { max-width: 500rpx; padding: 24rpx 32rpx; background: $color-bg-card; border-radius: 36rpx; font-size: 32rpx; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.textBubble { background: #EFEFEF; color: #222222; }
+.mine .textBubble { background: #3B3D43; color: $color-text-inverse; }
+.mine .locationBubble { background: #DDF5C8; }
 .time { text-align: center; font-size: 22rpx; color: $color-text-tertiary; margin: 24rpx 0; }
 .image { width: 320rpx; height: 320rpx; border-radius: 16rpx; }
 .cardTitle { display: block; font-size: 28rpx; font-weight: 600; }

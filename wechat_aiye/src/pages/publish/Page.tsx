@@ -3,12 +3,13 @@ import Taro from '@tarojs/taro';
 import { Image, Input, Picker, Switch, Text, Textarea, View } from '@tarojs/components';
 import classnames from 'classnames';
 import { getItem, mediaUrl, request, saveItem, showError, upload } from '@/services/api';
-import { getSession, requireLogin } from '@/store/session';
+import { getSession, getSessionGeneration, requireLogin, useSession } from '@/store/session';
+import { onboardingDestination } from '@/utils/authentication';
 import { ActionButton, StateView, Tags } from '@/components/UI';
 import { DECLARATIONS, displayLocation, EXPERIENCE_CATEGORIES, SERVICE_CATEGORIES, splitLines, uniqueId } from '@/utils/catalog';
 import { decodePriceTiers, encodePriceTiers } from '@/utils/pricing';
 import { decodeRanges } from '@/utils/booking';
-import { normalizePublicationTags, publicationOptions } from '@/utils/publication';
+import { movePublicationImage, normalizePublicationTags, publicationHints, publicationOptions } from '@/utils/publication';
 import type { PriceTier } from '@/utils/pricing';
 import type { DetailStep, Experience, ItemKind, Service, User } from '@/types/models';
 import styles from '@/styles/page.module.scss';
@@ -16,13 +17,14 @@ import styles from '@/styles/page.module.scss';
 type Form = Partial<Service & Experience>;
 const blank = (): Form => ({
   title: '', description: '', category: '地陪', location: '', price_text: '', price_basis_text: '',
-  image_urls: [], detail_steps: [], service_mode: '次', duration_text: '', badge_text: '',
+  image_urls: [], detail_steps: [], service_mode: '小时', duration_text: '', badge_text: '',
   prepayment_percent: 30, full_refund_cancel_lead_days: 1, booking_lead_hours: 0,
   booking_future_open_days: 30, auto_accept_after_payment: true, booking_time_ranges_json: '',
   service_declarations_extra: [], service_feature_tags: [], service_extra_fee_tags: [], tags: [],
   participant_ids: [], sync_to_square: true,
 });
 export default function PublishPage() {
+  const session = useSession();
   const params = Taro.getCurrentInstance().router?.params || {};
   const [kind, setKind] = useState<ItemKind>(params.kind === 'experience' ? 'experience' : 'service');
   const [form, setForm] = useState<Form>(blank);
@@ -40,8 +42,13 @@ export default function PublishPage() {
   const [participantNames, setParticipantNames] = useState<Record<string, string>>({});
   const [rangeStart, setRangeStart] = useState('08:00');
   const [rangeEnd, setRangeEnd] = useState('22:00');
-  const draftKey = `aiye.publish.draft.${getSession().user?.id || 'guest'}.${kind}.${params.id || 'new'}`;
+  const draftKey = `aiye.publish.draft.${session.user?.id || 'guest'}.${kind}.${params.id || 'new'}`;
+  const formKey = `${draftKey}.${getSessionGeneration()}`;
+  const onboardingRoute = onboardingDestination(session.user);
   useEffect(() => {
+    setReadyKey('');
+    // Password login briefly has a token while /auth/me is still loading.
+    if (session.token && !session.user) { setLoading(true); return; }
     if (!requireLogin()) { setLoading(false); return; }
     let active = true;
     const hydrate = (value: Form, prices?: PriceTier[]) => {
@@ -67,23 +74,27 @@ export default function PublishPage() {
             else if (active) hydrate({ ...blank(), category: kind === 'experience' ? EXPERIENCE_CATEGORIES[0] : SERVICE_CATEGORIES[0] });
           } else if (active) hydrate({ ...blank(), category: kind === 'experience' ? EXPERIENCE_CATEGORIES[0] : SERVICE_CATEGORIES[0] });
         }
-        if (active) setReadyKey(draftKey);
+        if (active) setReadyKey(formKey);
       } catch (err) { if (active) setError(err instanceof Error ? err.message : '加载失败'); }
       finally { if (active) setLoading(false); }
     };
     setReadyKey(''); setError(''); setLoading(true); void load();
     return () => { active = false; };
-  }, [kind, params.id, draftKey, retry]);
+  }, [kind, params.id, draftKey, formKey, onboardingRoute, retry]);
   useEffect(() => {
-    if (readyKey === draftKey && (form.title || form.description || form.image_urls?.length)) {
+    if (readyKey === formKey && (form.title || form.description || form.image_urls?.length)) {
       Taro.setStorageSync(draftKey, { form: {
         ...form, id: form.id || draftIds.current[kind],
         service_declarations_extra: splitLines(declarationsText).slice(0, 30), tags: splitLines(tagsText),
       }, tiers });
     }
-  }, [form, tiers, readyKey, draftKey, declarationsText, tagsText]);
-  const update = <K extends keyof Form>(key: K, value: Form[K]) => setForm(current => ({ ...current, [key]: value }));
-  const patchTier = (index: number, patch: Partial<PriceTier>) => setTiers(current => current.map((tier, i) => i === index ? { ...tier, ...patch } : tier));
+  }, [form, tiers, readyKey, draftKey, formKey, declarationsText, tagsText]);
+  const update = <K extends keyof Form>(key: K, value: Form[K]) => {
+    if (!operation.current) setForm(current => ({ ...current, [key]: value }));
+  };
+  const patchTier = (index: number, patch: Partial<PriceTier>) => {
+    if (!operation.current) setTiers(current => current.map((tier, i) => i === index ? { ...tier, ...patch } : tier));
+  };
   const addParticipant = async () => {
     if (operation.current || !participantQuery.trim()) return;
     if (new Set([getSession().user?.id, ...(form.participant_ids || [])]).size >= 20) {
@@ -99,13 +110,16 @@ export default function PublishPage() {
     finally { operation.current = false; setBusy(false); }
   };
   const addImages = async () => {
-    if (operation.current) return;
+    if (operation.current || (form.image_urls?.length || 0) >= 18) return;
+    const userId = session.user?.id;
     operation.current = true; setBusy(true);
     try {
       const result = await Taro.chooseImage({ count: Math.min(9, 18 - (form.image_urls?.length || 0)), sizeType: ['compressed'] });
+      if (getSession().user?.id !== userId) return;
       const urls: string[] = [];
       for (const path of result.tempFilePaths) urls.push((await upload(path, kind)).url);
-      update('image_urls', [...(form.image_urls || []), ...urls].slice(0, 18));
+      if (getSession().user?.id !== userId) return;
+      setForm(current => ({ ...current, image_urls: [...new Set([...(current.image_urls || []), ...urls])].slice(0, 18) }));
     } catch (err) {
       if (!(typeof err === 'object' && err !== null && 'errMsg' in err && String(err.errMsg).includes('cancel'))) showError(err);
     } finally { operation.current = false; setBusy(false); }
@@ -115,19 +129,42 @@ export default function PublishPage() {
   const addStepImages = async (index: number) => {
     const step = form.detail_steps?.[index];
     if (operation.current || !step || step.image_urls.length >= 9) return;
+    const userId = session.user?.id;
     operation.current = true; setBusy(true);
     try {
       const result = await Taro.chooseImage({ count: 9 - step.image_urls.length, sizeType: ['compressed'] });
+      if (getSession().user?.id !== userId) return;
       const urls: string[] = [];
       for (const path of result.tempFilePaths) urls.push((await upload(path, 'experience')).url);
+      if (getSession().user?.id !== userId) return;
       setForm(current => ({ ...current, detail_steps: current.detail_steps?.map((value, i) =>
         i === index ? { ...value, image_urls: [...value.image_urls, ...urls].slice(0, 9) } : value) }));
     } catch (err) {
       if (!(typeof err === 'object' && err !== null && 'errMsg' in err && String(err.errMsg).includes('cancel'))) showError(err);
     } finally { operation.current = false; setBusy(false); }
   };
+  const manageImage = async (index: number) => {
+    if (operation.current) return;
+    const images = form.image_urls || [];
+    const userId = session.user?.id;
+    const actions = [
+      ...(index > 0 ? ['设为封面', '前移一张'] : []),
+      ...(index < images.length - 1 ? ['后移一张'] : []), '删除图片',
+    ];
+    operation.current = true; setBusy(true);
+    try {
+      const result = await Taro.showActionSheet({ itemList: actions });
+      if (getSession().user?.id !== userId) return;
+      const action = actions[result.tapIndex];
+      setForm(current => ({ ...current, image_urls: action === '删除图片'
+        ? images.filter((_, i) => i !== index)
+        : movePublicationImage(images, index, action === '设为封面' ? 0 : index + (action === '前移一张' ? -1 : 1)) }));
+    } catch (err) {
+      if (!(typeof err === 'object' && err !== null && 'errMsg' in err && String(err.errMsg).includes('cancel'))) showError(err);
+    } finally { operation.current = false; setBusy(false); }
+  };
   const submit = async (draft: boolean) => {
-    if (operation.current || readyKey !== draftKey || !requireLogin()) return;
+    if (operation.current || readyKey !== formKey || !requireLogin()) return;
     if (!form.title?.trim()) { void Taro.showToast({ title: '请填写标题', icon: 'none' }); return; }
     if (!draft && (!form.description?.trim() || !form.location?.trim() || !form.image_urls?.length)) {
       void Taro.showToast({ title: '请填写介绍、地点并上传图片', icon: 'none' }); return;
@@ -180,9 +217,11 @@ export default function PublishPage() {
     } catch (err) { showError(err); }
     finally { operation.current = false; setBusy(false); }
   };
-  if (loading || error) return <StateView loading={loading} error={error} onRetry={() => setRetry(value => value + 1)} />;
+  if (!session.token) return <StateView onLogin={requireLogin} />;
+  if (loading || error || readyKey !== formKey) return <StateView loading={!error && (loading || readyKey !== formKey)} error={error} onRetry={() => setRetry(value => value + 1)} />;
   const categories = kind === 'service' ? SERVICE_CATEGORIES : EXPERIENCE_CATEGORIES;
   const options = publicationOptions(form.category);
+  const hints = publicationHints(form.category);
   return <View className={styles.page}>
     <View className={styles.header}><Text className={styles.title}>{params.id ? '编辑' : '发布'}{kind === 'service' ? '服务' : '体验'}</Text></View>
     {!params.id && <View className={styles.actions}>
@@ -193,25 +232,34 @@ export default function PublishPage() {
       <View className={styles.field}><Text className={styles.label}>分类</Text><Picker range={categories} value={Math.max(0, categories.indexOf(form.category || ''))}
         onChange={event => update('category', categories[Number(event.detail.value)])}><View className={styles.picker}>{form.category}<Text>›</Text></View></Picker></View>
       <View className={styles.field}><Text className={styles.label}>标题</Text><Input className={styles.input} maxlength={100} value={form.title}
-        placeholder="概括你的服务或体验" onInput={event => update('title', event.detail.value)} /></View>
+        placeholder={kind === 'service' ? hints.titlePlaceholder : '概括你的体验'} onInput={event => update('title', event.detail.value)} /></View>
       <View className={styles.field}><Text className={styles.label}>详细介绍</Text><Textarea className={styles.textarea} maxlength={10000} value={form.description}
-        placeholder="服务内容、流程、适合人群及注意事项" onInput={event => update('description', event.detail.value)} /></View>
+        placeholder={kind === 'service' ? hints.descriptionPlaceholder : '体验内容、流程、适合人群及注意事项'} onInput={event => update('description', event.detail.value)} /></View>
+      {kind === 'service' && hints.categoryTip && <Text className={styles.muted}>{hints.categoryTip}</Text>}
       <View className={styles.field}><Text className={styles.label}>地点</Text><Input className={styles.input} value={displayLocation(form.location)}
         placeholder="省市及服务地点" onInput={event => update('location', event.detail.value)} />
         <Text className={styles.link} onClick={async () => {
-          try { const location = await Taro.chooseLocation({}); update('location', location.address || location.name); }
+          if (operation.current) return;
+          const userId = session.user?.id;
+          operation.current = true; setBusy(true);
+          try {
+            const location = await Taro.chooseLocation({});
+            if (getSession().user?.id === userId) setForm(current => ({ ...current, location: location.address || location.name }));
+          }
           catch (err) { if (!(typeof err === 'object' && err !== null && 'errMsg' in err && String(err.errMsg).includes('cancel'))) showError(err); }
+          finally { operation.current = false; setBusy(false); }
         }}>地图选择地点</Text></View>
       <Text className={styles.heading}>图片</Text><View className={styles.photos}>
-        {(form.image_urls || []).map((url, index) => <View key={url} className={styles.photo}>
-          <Image src={mediaUrl(url)} className={styles.photoImage} mode="aspectFill" onError={() => console.error('[Publish] Image failed')} />
+        {(form.image_urls || []).map((url, index) => <View key={`${url}-${index}`} className={styles.photo} onLongPress={() => void manageImage(index)}>
+          <Image src={mediaUrl(url)} className={styles.photoImage} mode="aspectFill" onError={() => console.error('[Publish] Image failed')}
+            onClick={() => { if (!operation.current) void Taro.previewImage({ current: mediaUrl(url), urls: (form.image_urls || []).map(mediaUrl) }); }} />
           <Text className={styles.remove} onClick={() => update('image_urls', form.image_urls?.filter((_, i) => i !== index))}>×</Text>
           {index === 0 && <Text className={styles.badge}>封面</Text>}
           {index > 0 && <Text className={styles.badge} onClick={() => !busy && update('image_urls',
             [url, ...(form.image_urls || []).filter((_, i) => i !== index)])}>设为封面</Text>}
         </View>)}
         {(form.image_urls?.length || 0) < 18 && <View className={classnames(styles.photo, styles.addPhoto)} onClick={() => void addImages()}>+</View>}
-      </View><Text className={styles.muted}>第一张图片为封面，最多18张</Text>
+      </View><Text className={styles.muted}>第一张图片为封面，最多18张。点击预览，长按调整顺序或删除。</Text>
     </View>
     {kind === 'service' ? <>
       <View className={styles.section}><Text className={styles.heading}>价格档位</Text>
@@ -223,11 +271,10 @@ export default function PublishPage() {
           <View className={styles.search}><Input className={styles.input} type="number" value={String(tier.duration_amount)}
             onInput={event => patchTier(index, { duration_amount: Number(event.detail.value) })} />
             <Picker range={['小时', '分钟']} onChange={event => patchTier(index, { duration_unit: ['小时', '分钟'][Number(event.detail.value)] })}><View className={styles.picker}>{tier.duration_unit}</View></Picker></View>
-          {tiers.length > 1 && <Text className={styles.link} onClick={() => setTiers(current => current.filter((_, i) => i !== index))}>删除档位</Text>}
+          {tiers.length > 1 && <Text className={styles.link} onClick={() => !operation.current && setTiers(current => current.filter((_, i) => i !== index))}>删除档位</Text>}
         </View>)}
-        {tiers.length < 10 && <ActionButton small outline onClick={() => setTiers(current => [...current, { name: '', price: '', duration_amount: 4, duration_unit: '小时' }])}>添加档位</ActionButton>}
-        <View className={styles.field}><Text className={styles.label}>计价单位</Text><Picker range={['小时', '天', '次', '人']}
-          onChange={event => update('service_mode', ['小时', '天', '次', '人'][Number(event.detail.value)])}><View className={styles.picker}>{form.service_mode}</View></Picker></View>
+        {tiers.length < 10 && <ActionButton small outline disabled={busy} onClick={() => setTiers(current => [...current, { name: '', price: '', duration_amount: 4, duration_unit: '小时' }])}>添加档位</ActionButton>}
+        <Text className={styles.muted}>各档位分别设置时长，支持小时或分钟。默认时长为4小时。</Text>
       </View>
       <View className={styles.section}><Text className={styles.heading}>服务参与者</Text>
         <Text className={styles.muted}>发布者默认参与，最多20人。添加参与者仅保存展示信息，不授予编辑或收款权限。</Text>

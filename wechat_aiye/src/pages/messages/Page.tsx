@@ -19,6 +19,8 @@ export default function MessagesPage() {
   const [starred, setStarred] = useState<string[]>([]);
   const [starters, setStarters] = useState<Record<string, string>>({});
   const [classifying, setClassifying] = useState(false);
+  const [classificationError, setClassificationError] = useState('');
+  const [classificationRetry, setClassificationRetry] = useState(0);
   const archiveKey = `aiye.archived.${session.user?.id || 'guest'}`;
   const resource = useResource(() => getSession().token ? getConversations() : Promise.resolve([] as ConversationItem[]), [] as ConversationItem[], archiveKey);
   useDidShow(() => { setVisible(true); setArchived(Taro.getStorageSync<string[]>(archiveKey) || []); void resource.refresh(); });
@@ -27,14 +29,17 @@ export default function MessagesPage() {
     setArchived(Taro.getStorageSync<string[]>(archiveKey) || []);
     setStarred(Taro.getStorageSync<string[]>(`aiye.starred.${session.user?.id || 'guest'}`) || []);
     setStarters({});
+    setClassificationError('');
   }, [archiveKey]);
   useEffect(() => {
     setClassifying(false);
-    if (!session.user?.id || !['问询我的', '我问询的'].includes(tab)) return;
+    setClassificationError('');
+    if (!visible || !session.user?.id || !['问询我的', '我问询的'].includes(tab)) return;
     const missing = resource.data.filter(item => !starters[item.conversation.id]);
     if (!missing.length) return;
     let active = true;
     let index = 0;
+    let failures = 0;
     setClassifying(true);
     const worker = async () => {
       while (active && index < missing.length) {
@@ -42,17 +47,25 @@ export default function MessagesPage() {
         try {
           const starter = await getConversationStarter(id);
           if (active && starter) setStarters(current => ({ ...current, [id]: starter }));
-        } catch { console.error('[Messages] Inquiry classification unavailable'); }
+        } catch {
+          failures++;
+          console.error('[Messages] Inquiry classification unavailable');
+        }
       }
     };
-    void Promise.all([worker(), worker()]).finally(() => { if (active) setClassifying(false); });
+    void Promise.all([worker(), worker()]).finally(() => {
+      if (active) {
+        setClassifying(false);
+        if (failures) setClassificationError(`${failures}个会话的问询方向暂时无法读取，请重试。`);
+      }
+    });
     return () => { active = false; };
-  }, [tab, session.user?.id, resource.data]);
+  }, [tab, session.user?.id, resource.data, visible, classificationRetry]);
   useEffect(() => {
-    if (!visible || !session.token) return;
+    if (!visible || !session.token || classifying) return;
     const timer = setInterval(() => { void resource.refresh(); }, 15000);
     return () => clearInterval(timer);
-  }, [visible, session.token, resource.refresh]);
+  }, [visible, session.token, resource.refresh, classifying]);
   useEffect(() => {
     const unread = resource.data.reduce((sum, item) => sum + (item.member?.unread_count || 0), 0);
     if (unread) void Taro.setTabBarBadge({ index: 2, text: unread > 99 ? '99+' : String(unread) }).catch(() => undefined);
@@ -76,8 +89,9 @@ export default function MessagesPage() {
         {['全部', '问询我的', '我问询的', '用户支持', '未读', '已归档'].map(name => <View key={name} className={classnames(styles.tab, tab === name && styles.active)} onClick={() => setTab(name)}>{name}</View>)}
       </View></ScrollView></View>
       {tab === '用户支持' && <View className={styles.notice}>专属客服会话尚未配置，可在“我的 → 设置”提交意见反馈。</View>}
-      <StateView loading={classifying || (resource.loading && !resource.data.length)} error={resource.error}
-        empty={!items.length} title="暂无消息" onRetry={resource.error ? resource.refresh : undefined} />
+      <StateView loading={classifying || (resource.loading && !resource.data.length)} error={resource.error || classificationError}
+        empty={!items.length} title="暂无消息" onRetry={resource.error ? resource.refresh
+          : classificationError ? () => setClassificationRetry(value => value + 1) : undefined} />
       {items.map(item => <View key={item.conversation.id} className={styles.row}
         onClick={() => Taro.navigateTo({ url: `/pages/thread/index?id=${encodeURIComponent(item.conversation.id)}&peer=${encodeURIComponent(item.peer?.id || '')}` })}
         onLongPress={async () => {

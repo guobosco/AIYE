@@ -9,6 +9,16 @@
 .title { display: block; font-size: 30rpx; line-height: 40rpx; font-weight: 600; margin-top: 16rpx; @include text-ellipsis-multi(2); }
 .meta { display: block; font-size: 24rpx; color: $color-text-secondary; line-height: 34rpx; margin-top: 8rpx; @include text-ellipsis; }
 .price { display: block; margin-top: 8rpx; color: $color-text-primary; font-size: 28rpx; }
+.serviceHome {
+  .body { padding: 20rpx 24rpx 8rpx; }
+  .title { margin-top: 0; color: #222222; }
+  .meta { font-size: 28rpx; line-height: 36rpx; height: 36rpx; color: #717171; }
+  .price { margin-top: 6rpx; line-height: 36rpx; height: 36rpx; color: #717171; @include text-ellipsis; }
+}
+.experienceHome {
+  .title { margin-top: 20rpx; font-weight: 700; }
+  .badge { color: #000000; font-weight: 500; }
+}
 .row { display: flex; align-items: center; gap: 24rpx; padding: 24rpx 0; border-bottom: 1rpx solid $color-divider;
   .cover { width: 160rpx; height: 160rpx; flex-shrink: 0; border-radius: 20rpx; }
   .body { flex: 1; }

@@ -3,6 +3,7 @@
 .page {
   min-height: 100vh;
   background: #ffffff;
+  padding-bottom: 48rpx;
 }
 
 .topBar {
@@ -12,15 +13,15 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 102rpx;
-  padding: 0 20rpx;
+  height: 112rpx;
+  padding: 0 16rpx;
   background: #ffffff;
 }
 
 .topBarPlaceholder,
 .topBarAction {
-  width: 64rpx;
-  height: 64rpx;
+  width: 96rpx;
+  height: 96rpx;
 }
 
 .topBarAction {
@@ -60,7 +61,7 @@
 .tabSwitch {
   display: flex;
   align-items: center;
-  gap: 32rpx;
+  gap: 40rpx;
 }
 
 .topTab {
@@ -68,6 +69,8 @@
   flex-direction: column;
   align-items: center;
   min-width: 80rpx;
+  min-height: 88rpx;
+  justify-content: center;
 }
 
 .topTabText {
@@ -84,7 +87,7 @@
   font-size: 38rpx;
   font-weight: 700;
   color: #2f2730;
-  transform: scale(1.04);
+  transform: scale(1);
 }
 
 .topTabLine {
@@ -119,11 +122,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 48rpx;
-  padding: 0 24rpx;
+  height: 52rpx;
+  padding: 0 28rpx;
   border-radius: 999rpx;
-  font-size: 22rpx;
-  line-height: 48rpx;
+  font-size: 24rpx;
+  line-height: 52rpx;
   font-weight: 500;
 }
 
@@ -138,22 +141,20 @@
 }
 
 .waterfall {
-  display: flex;
-  align-items: flex-start;
-  gap: 20rpx;
-  padding: 14rpx 16rpx 8rpx;
+  padding: 20rpx 20rpx 24rpx;
 }
+
+.loadMore { padding: 0 20rpx 24rpx; }
 
 .waterfallColumn {
   flex: 1;
+  min-width: 0;
 }
 
 .feedCard {
   margin-bottom: 20rpx;
   background: $color-bg-card;
-  border-radius: 28rpx;
-  overflow: hidden;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.04);
+  border-radius: 0;
 }
 
 .feedCover {
@@ -221,25 +222,31 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6rpx 20rpx 0;
+  padding: 0 16rpx;
+  min-height: 96rpx;
 }
 
 .sectionTitle,
 .experienceTitle {
-  color: #202020;
-  font-size: 30rpx;
-  font-weight: 800;
-  line-height: 42rpx;
+  color: $color-text-primary;
+  font-size: 40rpx;
+  font-weight: 700;
+  line-height: 52rpx;
+  padding: 0 8rpx 0 16rpx;
+  flex: 1;
+  min-width: 0;
+  @include text-ellipsis;
 }
 
 .sectionMore {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 52rpx;
-  height: 52rpx;
-  border-radius: 26rpx;
-  background: #f7f7f7;
+  width: 96rpx;
+  height: 96rpx;
+  font-size: 40rpx;
+  color: $color-text-secondary;
+  flex-shrink: 0;
 }
 
 .sectionMoreText {
@@ -319,13 +326,15 @@
 }
 
 .experienceSection {
-  padding: 16rpx 0 8rpx;
+  padding: 44rpx 0 0;
 }
+
+.firstSection { padding-top: 20rpx; }
 
 .experienceRow {
   display: inline-flex;
-  gap: 24rpx;
-  padding: 14rpx 20rpx 8rpx;
+  gap: 20rpx;
+  padding: 24rpx 32rpx 0;
 }
 
 .experienceCard {

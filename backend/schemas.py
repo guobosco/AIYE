@@ -202,20 +202,6 @@ class AdminLoginResponse(BaseModel):
     expires_in_seconds: int = 0
 
 
-class AdminOperationLog(BaseModel):
-    id: str
-    actor: str = "admin"
-    action: str = ""
-    entity_type: str = ""
-    entity_id: str = ""
-    summary: str = ""
-    detail: str = ""
-    created_at: int = 0
-
-    class Config:
-        from_attributes = True
-
-
 class WishlistGroupPayload(BaseModel):
     name: str = ""
     service_ids: List[str] = Field(default_factory=list)

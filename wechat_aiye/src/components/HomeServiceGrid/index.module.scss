@@ -1,0 +1,23 @@
+@use '@/styles/variables.scss' as *;
+.wrapper { width: 100%; min-width: 0; }
+.root {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 20rpx;
+  width: 100%;
+}
+.item { width: calc((100% - 20rpx) / 2); min-width: 0; }
+.positioned { position: absolute; }
+.pending { visibility: hidden; }
+.measuring { overflow: hidden; }
+.status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 16rpx 0;
+  color: $color-text-secondary;
+  font-size: 24rpx;
+}

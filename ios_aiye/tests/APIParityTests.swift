@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 final class MemoryTokenStore: TokenStore, @unchecked Sendable {
@@ -45,7 +46,33 @@ struct APIParityTests {
         print("PASS: \(label)")
     }
 
+    @MainActor
+    static func checkLocalSignOut() throws {
+        let suite = "aiye-logout-tests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let tokens = MemoryTokenStore()
+        let users = UserDefaultsCurrentUserStore(defaults: defaults)
+        let appSession = AppSession(tokenStore: tokens, currentUserStore: users, defaults: defaults)
+        try tokens.writeRefreshToken("local-refresh")
+        try appSession.completeWeChatSignIn(
+            accessToken: "local-access", userId: "local-user", requiresPhoneBinding: true
+        )
+        var changes = 0
+        let subscription = appSession.objectWillChange.sink { changes += 1 }
+        appSession.signOut()
+        try check(!appSession.isAuthenticated && appSession.currentUserId == nil &&
+                  !appSession.requiresPhoneBinding && tokens.readAccessToken() == nil &&
+                  tokens.readRefreshToken() == nil && users.readCurrentUserId() == nil && changes > 0,
+                  "local logout immediately clears credentials, user, binding state and publishes changes")
+        try appSession.signIn(accessToken: "new-local-access")
+        try check(appSession.isAuthenticated, "sign in works again after local logout")
+        subscription.cancel()
+        appSession.signOut()
+    }
+
     static func main() async throws {
+        try await checkLocalSignOut()
         // Never write test accounts or uploads to the user's normal backend.
         let baseURL = URL(string: "http://127.0.0.1:18000")!
         let prefixedBase = URL(string: "http://127.0.0.1:18000/api/v1/")!
@@ -187,6 +214,8 @@ struct APIParityTests {
         try check(ContactGroupData.load(userID: peer.id, defaults: defaults).groups.isEmpty,
                   "contact group preferences are isolated per account")
         let conversation = try await api.createDirectConversation(peerId: peer.id)
+        let conversations = try await api.getChatConversations()
+        try check(conversations.contains { $0.id == conversation.id }, "paginated conversation list decodes")
         let chatUpload = try await api.uploadMedia(data: png, filename: "chat.png", mimeType: "image/png", business: "chat")
         let message = try await api.sendChatMessage(
             conversationId: conversation.id, content: "[图片]", type: "image",
@@ -200,6 +229,13 @@ struct APIParityTests {
             extra: ["latitude": "18.25", "longitude": "109.51", "name": "三亚", "address": "海南省三亚市"]
         )
         try check(location.extra?["latitude"] == "18.25", "location chat payload")
+        try check(location.clientMessageId?.isEmpty == false, "message API supplies a default request ID")
+        let retriedLocation = try await api.sendChatMessage(
+            conversationId: conversation.id, content: "三亚", type: "location",
+            extra: ["latitude": "18.25", "longitude": "109.51", "name": "三亚", "address": "海南省三亚市"],
+            clientMessageId: location.clientMessageId
+        )
+        try check(retriedLocation.id == location.id, "message retry returns the original server message")
         let card = try await api.sendChatMessage(
             conversationId: conversation.id, content: service.title, type: "service_card",
             extra: ["service_id": service.id, "title": service.title, "cover_image": upload.url, "item_type": "service"]
@@ -242,6 +278,25 @@ struct APIParityTests {
             try check(status == 401 && tokenStore.readRefreshToken() == nil,
                       "revoked credentials remain rejected after local restoration")
         }
+        let logoutToken = try await api.authToken(username: peerPhone, password: password)
+        try tokenStore.deleteAccessToken()
+        try tokenStore.deleteRefreshToken()
+        try await api.logout(accessToken: logoutToken.accessToken)
+        try check(tokenStore.readAccessToken() == nil && tokenStore.readRefreshToken() == nil,
+                  "remote logout works after immediate local credential removal")
+        let newLogin = try await api.authToken(username: peerPhone, password: password)
+        do {
+            try await api.logout(accessToken: logoutToken.accessToken)
+            throw NSError(domain: "APIParityTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "revoked logout token was accepted"])
+        } catch let error as APIError {
+            guard case .server(let status, _) = error else { throw error }
+            try check(status == 401 && tokenStore.readAccessToken() == newLogin.accessToken &&
+                      tokenStore.readRefreshToken() == newLogin.refreshToken,
+                      "late logout failure neither refreshes nor clears a new login")
+        }
+        let stillLoggedIn = try await api.getMe()
+        try check(stillLoggedIn.id == peer.id, "new login remains usable after an old logout fails")
+        try await api.logout()
         print("All iOS API parity tests passed.")
     }
 }

@@ -4,6 +4,6 @@ sqlalchemy
 pydantic
 python-multipart
 python-jose
-passlib[bcrypt]
+bcrypt
 redis
 psycopg[binary]

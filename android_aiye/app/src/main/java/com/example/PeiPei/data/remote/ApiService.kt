@@ -179,7 +179,10 @@ interface ApiService {
     suspend fun createDirectConversation(@Path("peerId") peerId: String): CreateDirectConversationResponse
 
     @GET("chat/conversations")
-    suspend fun getChatConversations(): List<ConversationListItem>
+    suspend fun getChatConversations(
+        @Query("skip") skip: Int = 0,
+        @Query("limit") limit: Int = 100
+    ): List<ConversationListItem>
 
     @GET("chat/conversations/{conversationId}/messages")
     suspend fun getChatMessages(

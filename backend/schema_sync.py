@@ -1,4 +1,3 @@
-import json
 from typing import Any
 
 from sqlalchemy import inspect, text
@@ -74,63 +73,39 @@ def _default_sql_literal(table_name: str, column_name: str, column: Any = None):
     return None
 
 
-def _rebuild_table_without_columns(connection, inspector, table_name: str, remove_columns: set[str]):
-    columns = inspector.get_columns(table_name)
-    keep_columns = [column for column in columns if column["name"] not in remove_columns]
-    if len(keep_columns) == len(columns):
-        return []
-
-    column_defs = []
-    insert_columns = []
-    pk_columns = []
-    for column in keep_columns:
-        name = _quoted(column["name"])
-        col_type = column["type"].compile(dialect=connection.dialect)
-        parts = [name, col_type]
-        if column.get("primary_key"):
-            pk_columns.append(name)
-        if not column.get("nullable", True):
-            parts.append("NOT NULL")
-        default = column.get("default")
-        if default not in (None, ""):
-            parts.append(f"DEFAULT {default}")
-        column_defs.append(" ".join(parts))
-        insert_columns.append(name)
-
-    if pk_columns:
-        column_defs.append(f"PRIMARY KEY ({', '.join(pk_columns)})")
-
-    temp_table = f"{table_name}__schema_sync_new"
-    statements = [
-        f"CREATE TABLE {_quoted(temp_table)} ({', '.join(column_defs)});",
-        (
-            f"INSERT INTO {_quoted(temp_table)} ({', '.join(insert_columns)}) "
-            f"SELECT {', '.join(insert_columns)} FROM {_quoted(table_name)};"
-        ),
-        f"DROP TABLE {_quoted(table_name)};",
-        f"ALTER TABLE {_quoted(temp_table)} RENAME TO {_quoted(table_name)};",
-    ]
-
-    for statement in statements:
+def _drop_legacy_columns(connection, table_name: str, remove_columns: set[str]):
+    # Native DROP COLUMN preserves unrelated indexes/constraints, unlike table rebuilding.
+    version = tuple(int(part) for part in connection.exec_driver_sql(
+        "SELECT sqlite_version()"
+    ).scalar().split("."))
+    if version < (3, 35, 0):
+        raise RuntimeError("Legacy column cleanup requires SQLite >= 3.35")
+    statements = []
+    for column_name in sorted(remove_columns):
+        statement = f"ALTER TABLE {_quoted(table_name)} DROP COLUMN {_quoted(column_name)};"
         connection.execute(text(statement))
+        statements.append(statement)
     return statements
 
 
-def sync_sqlite_schema(engine, metadata):
+def sync_sqlite_schema(engine, metadata, allow_destructive: bool = False):
     if engine.url.get_backend_name() != "sqlite":
         return []
 
-    inspector = inspect(engine)
     executed_statements = []
     with engine.begin() as connection:
-        for table_name in sorted(DROP_TABLES):
-            if not inspector.has_table(table_name):
-                continue
-            statement = f"DROP TABLE {_quoted(table_name)};"
-            connection.execute(text(statement))
-            executed_statements.append(statement)
+        # Explicit BEGIN makes SQLite DDL rollback together if any migration fails.
+        connection.exec_driver_sql("BEGIN IMMEDIATE")
+        inspector = inspect(connection)
+        if allow_destructive:
+            for table_name in sorted(DROP_TABLES - set(metadata.tables)):
+                if not inspector.has_table(table_name):
+                    continue
+                statement = f"DROP TABLE {_quoted(table_name)};"
+                connection.execute(text(statement))
+                executed_statements.append(statement)
 
-        inspector = inspect(engine)
+        inspector = inspect(connection)
         for table_name, table in metadata.tables.items():
             if not inspector.has_table(table_name):
                 continue
@@ -160,52 +135,21 @@ def sync_sqlite_schema(engine, metadata):
                     executed_statements.append(statement)
                     db_columns.add(column.name)
 
-        inspector = inspect(engine)
-        for table_name, removable_columns in DROP_COLUMNS.items():
-            if not inspector.has_table(table_name):
-                continue
-
-            db_columns = {column["name"] for column in inspector.get_columns(table_name)}
-            stale_columns = db_columns.intersection(removable_columns)
-            if not stale_columns:
-                continue
-
-            executed_statements.extend(
-                _rebuild_table_without_columns(connection, inspector, table_name, stale_columns)
-            )
-            inspector = inspect(engine)
-
-        inspector = inspect(engine)
-        for table_name in DROP_TABLES:
-            if table_name in metadata.tables:
-                continue
-            if not inspector.has_table(table_name):
-                continue
-            statement = f"DROP TABLE {_quoted(table_name)};"
-            connection.execute(text(statement))
-            executed_statements.append(statement)
-            inspector = inspect(engine)
-
-        inspector = inspect(engine)
-        for table_name, column_names in JSON_LIST_DEFAULTS.items():
-            if not inspector.has_table(table_name):
-                continue
-
-            current_columns = {column["name"] for column in inspector.get_columns(table_name)}
-            for column_name in column_names:
-                if column_name not in current_columns:
+        if allow_destructive:
+            inspector = inspect(connection)
+            for table_name, removable_columns in DROP_COLUMNS.items():
+                if not inspector.has_table(table_name):
                     continue
-
-                connection.execute(
-                    text(
-                        f'UPDATE {_quoted(table_name)} '
-                        f'SET {_quoted(column_name)} = :value '
-                        f'WHERE {_quoted(column_name)} IS NULL'
-                    ),
-                    {"value": json.dumps([])},
+                db_columns = {column["name"] for column in inspector.get_columns(table_name)}
+                stale_columns = db_columns.intersection(removable_columns)
+                if not stale_columns:
+                    continue
+                executed_statements.extend(
+                    _drop_legacy_columns(connection, table_name, stale_columns)
                 )
+                inspector = inspect(connection)
 
-        inspector = inspect(engine)
+        inspector = inspect(connection)
         for table_name, table in metadata.tables.items():
             if not inspector.has_table(table_name):
                 continue

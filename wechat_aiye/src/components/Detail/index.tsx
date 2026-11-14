@@ -104,7 +104,7 @@ export default function Detail({ kind }: { kind: ItemKind }) {
       <View className={styles.section}><Text className={styles.heading}>{kind === 'service' ? '服务特点' : '体验标签'}</Text>
         <Tags values={kind === 'service' ? service?.service_feature_tags || [] : experience?.tags || []} /></View>
       <View className={styles.section}><Text className={styles.heading}>价格与费用</Text>
-        {kind === 'service' ? tiers.map((value, index) => <View key={index} className={styles.plan}><Text className={styles.hostName}>{value.name}</Text>
+        {kind === 'service' ? tiers.map((value, index) => <View key={index} className={styles.plan}><Text className={styles.hostName}>{value.name || `档位${index + 1}`}</Text>
           <Text className={styles.meta}>{value.price} · {value.duration_amount}{value.duration_unit}</Text></View>)
           : <Text className={styles.text}>{item.price_text} {priceBasisLabel(item.price_basis_text)}</Text>}
         {kind === 'service' && <><Text className={styles.meta}>预付款 {service?.prepayment_percent ?? 30}%</Text>
@@ -129,7 +129,7 @@ export default function Detail({ kind }: { kind: ItemKind }) {
       <View className={styles.sheetHeader}><Text className={styles.heading}>预定问询</Text><Text className={styles.close} onClick={() => setSheet(false)}>×</Text></View>
       <ScrollView scrollY className={styles.scroll}>
         {kind === 'service' && tiers.map((value, index) => <View key={index} className={classnames(styles.plan, plan === index && styles.selected)} onClick={() => setPlan(index)}>
-          <Text className={styles.hostName}>{value.name}</Text><Text className={styles.meta}>{value.price} · {value.duration_amount}{value.duration_unit}</Text>
+          <Text className={styles.hostName}>{value.name || `档位${index + 1}`}</Text><Text className={styles.meta}>{value.price} · {value.duration_amount}{value.duration_unit}</Text>
         </View>)}
         <ScrollView scrollX className={styles.dates}>{days.map(value => <View key={value.key} className={classnames(styles.date, day?.key === value.key && styles.selected)}
           onClick={() => { setDate(value.key); setTime(''); }}>{value.label}</View>)}</ScrollView>

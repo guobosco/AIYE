@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Taro from '@tarojs/taro';
 import { Image, Input, Picker, Switch, Text, Textarea, View } from '@tarojs/components';
 import classnames from 'classnames';
 import { mediaUrl, request, showError, upload } from '@/services/api';
-import { getSession, requireLogin, updateSessionUser } from '@/store/session';
+import { finishAccountFlow, getSession, getSessionGeneration, requireLogin, requireSession, updateSessionUser, useSession } from '@/store/session';
+import { hasVerifiedPhone } from '@/utils/authentication';
 import { ActionButton, Avatar, MenuRow, StateView, Tags } from '@/components/UI';
 import { splitLines } from '@/utils/catalog';
 import type { User } from '@/types/models';
@@ -18,6 +19,16 @@ const FIELDS: Array<{ key: keyof User; label: string; placeholder?: string }> = 
   { key: 'middle_school_favorite_song', label: '中学最喜欢的歌' },
 ];
 export default function ProfileEditPage() {
+  const session = useSession();
+  const loginGeneration = getSessionGeneration();
+  const [formGeneration, setFormGeneration] = useState(loginGeneration);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+  const generation = useRef(0);
+  const operation = useRef(false);
   const [user, setUser] = useState<User | null>(getSession().user);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -25,53 +36,76 @@ export default function ProfileEditPage() {
   const [customTag, setCustomTag] = useState('');
   const [languages, setLanguages] = useState(getSession().user?.spoken_languages?.join('、') || '');
   const load = async () => {
-    if (!requireLogin()) return;
+    const userId = getSession().user?.id;
+    const sessionGeneration = getSessionGeneration();
+    if (!getSession().token || !userId) return;
+    const current = ++generation.current;
     setLoading(true);
     try {
       const loaded = await request<User>('/auth/me');
+      if (current !== generation.current || getSession().user?.id !== userId || getSessionGeneration() !== sessionGeneration) return;
       setUser(loaded); setLanguages(loaded.spoken_languages?.join('、') || ''); setError('');
     }
-    catch (err) { setError(err instanceof Error ? err.message : '加载失败'); }
-    finally { setLoading(false); }
+    catch (err) {
+      if (current === generation.current && getSessionGeneration() === sessionGeneration) setError(err instanceof Error ? err.message : '加载失败');
+    }
+    finally { if (current === generation.current) setLoading(false); }
   };
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    setUser(null); setLanguages(''); setCustomTag(''); setError(''); setFormGeneration(loginGeneration);
+    void load();
+    return () => { generation.current++; };
+  }, [loginGeneration, session.user?.id]);
   const update = <K extends keyof User>(key: K, value: User[K]) => setUser(current => current ? { ...current, [key]: value } : current);
   const selectImage = async (avatar: boolean) => {
-    if (busy || !user) return;
+    if (operation.current || !user) return;
+    if (!avatar && (user.profile_image_urls?.length || 0) >= 18) return;
+    const userId = user.id;
+    const sessionGeneration = getSessionGeneration();
+    const current = () => mounted.current && getSessionGeneration() === sessionGeneration && getSession().user?.id === userId;
+    operation.current = true; setBusy(true);
     try {
       const result = await Taro.chooseImage({ count: avatar ? 1 : Math.min(9, 18 - (user.profile_image_urls?.length || 0)), sizeType: ['compressed'] });
-      setBusy(true);
+      if (!current()) return;
       const uploaded: string[] = [];
       for (const path of result.tempFilePaths) uploaded.push((await upload(path, 'avatar')).url);
+      if (!current() || !uploaded.length) return;
       if (avatar) {
         setUser(current => current ? { ...current, photo_url: uploaded[0],
           profile_image_urls: [...new Set([uploaded[0], ...(current.profile_image_urls || [])])].slice(0, 18) } : current);
-      } else update('profile_image_urls', [...new Set([...(user.profile_image_urls || []), ...uploaded])].slice(0, 18));
+      } else setUser(current => current?.id === userId ? {
+        ...current, profile_image_urls: [...new Set([...(current.profile_image_urls || []), ...uploaded])].slice(0, 18),
+      } : current);
     } catch (err) {
-      if (!(typeof err === 'object' && err !== null && 'errMsg' in err && String(err.errMsg).includes('cancel'))) showError(err);
-    } finally { setBusy(false); }
+      if (current() && !(typeof err === 'object' && err !== null && 'errMsg' in err && String(err.errMsg).includes('cancel'))) showError(err);
+    } finally { operation.current = false; if (mounted.current) setBusy(false); }
   };
   const save = async () => {
-    if (!user || busy) return;
+    if (!user || operation.current || user.id !== getSession().user?.id) return;
+    if (!hasVerifiedPhone(getSession().user)) { requireLogin(); return; }
+    const sessionGeneration = getSessionGeneration();
     if (!user.name.trim() || !user.gender || !user.region || !user.photo_url) {
       void Taro.showToast({ title: '请填写昵称、性别、地区并设置头像', icon: 'none' }); return;
     }
-    if (user.height_cm < 0 || user.height_cm > 250 || user.weight_kg < 0 || user.weight_kg > 300) {
+    if (!Number.isFinite(user.height_cm) || !Number.isFinite(user.weight_kg)
+      || user.height_cm < 0 || user.height_cm > 250 || user.weight_kg < 0 || user.weight_kg > 300) {
       void Taro.showToast({ title: '请检查身高体重', icon: 'none' }); return;
     }
-    setBusy(true);
+    operation.current = true; setBusy(true);
     try {
       const saved = await request<User>(`/users/${encodeURIComponent(user.id)}`, 'PUT', {
         ...user, name: user.name.trim(), spoken_languages: [...new Set(languages.split(/[,，、\n]/).map(value => value.trim()).filter(Boolean))],
         is_profile_completed: true, updated_at: Date.now(),
       });
+      if (!mounted.current || getSessionGeneration() !== sessionGeneration) return;
       updateSessionUser(saved);
       void Taro.showToast({ title: '已保存', icon: 'success' });
-      void Taro.navigateBack({ fail: () => Taro.switchTab({ url: '/pages/mine/index' }) });
-    } catch (err) { showError(err); }
-    finally { setBusy(false); }
+      await finishAccountFlow(saved, sessionGeneration);
+    } catch (err) { if (mounted.current && getSessionGeneration() === sessionGeneration) showError(err); }
+    finally { operation.current = false; if (mounted.current) setBusy(false); }
   };
-  if (!user || loading) return <StateView loading={loading} error={error} onRetry={load} />;
+  if (!session.token) return <StateView onLogin={requireSession} />;
+  if (formGeneration !== loginGeneration || !user || user.id !== session.user?.id || loading || error) return <StateView loading={loading || formGeneration !== loginGeneration} error={error} onRetry={load} />;
   return <View className={styles.page}>
     <View className={styles.header}><Text className={styles.title}>编辑资料</Text><View onClick={() => void selectImage(true)}><Avatar url={user.photo_url} name={user.name} size={128} /></View></View>
     <Text className={styles.link} onClick={() => void selectImage(true)}>更换头像</Text>

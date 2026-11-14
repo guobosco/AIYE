@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import Taro, { useDidShow } from '@tarojs/taro';
 import { Input, ScrollView, Text, View } from '@tarojs/components';
 import classnames from 'classnames';
-import { getExperienceFavorites, getItem, getWishlist, saveWishlist, showError } from '@/services/api';
+import { getExperienceFavorites, getItem, getWishlist, removeFavorite, updateWishlist, showError } from '@/services/api';
 import { getSession, requireLogin, useSession } from '@/store/session';
 import { useResource } from '@/hooks/useResource';
 import { ActionButton, StateView } from '@/components/UI';
@@ -37,12 +37,12 @@ export default function WishlistPage() {
   useEffect(() => {
     setGroup('全部服务'); setEditing(false); setGroupEditor(null);
   }, [session.user?.id]);
-  const save = async (profile: WishlistProfile) => {
+  const save = async (update: (profile: WishlistProfile) => WishlistProfile) => {
     if (saveLock.current) return false;
     saveLock.current = true;
     setSaving(true);
     try {
-      const updated = await saveWishlist(profile);
+      const updated = await updateWishlist(update);
       resource.setData(data => ({ ...data, profile: updated }));
       return true;
     } catch (error) { showError(error); return false; }
@@ -55,10 +55,14 @@ export default function WishlistPage() {
     if (['全部服务', '体验', ...resource.data.profile.groups.filter(value => value.name !== groupEditor).map(value => value.name)].includes(name)) {
       void Taro.showToast({ title: '分组名称已存在', icon: 'none' }); return;
     }
-    const groups = groupEditor
-      ? resource.data.profile.groups.map(value => value.name === groupEditor ? { ...value, name } : value)
-      : [...resource.data.profile.groups, { name, service_ids: [] }];
-    if (await save({ ...resource.data.profile, groups })) { setGroup(name); setGroupEditor(null); }
+    if (await save(profile => {
+      if (profile.groups.some(value => value.name === name && value.name !== groupEditor)) {
+        throw new Error('分组名称已存在，请刷新后重试');
+      }
+      return { ...profile, groups: groupEditor
+        ? profile.groups.map(value => value.name === groupEditor ? { ...value, name } : value)
+        : [...profile.groups, { name, service_ids: [] }] };
+    })) { setGroup(name); setGroupEditor(null); }
   };
   const manageGroup = async () => {
     if (group === '全部服务' || group === '体验') return;
@@ -69,7 +73,7 @@ export default function WishlistPage() {
     } else {
       const dialog = await Taro.showModal({ title: '删除分组', content: '仅删除分组，不取消收藏。' });
       if (dialog.confirm) {
-        if (await save({ ...resource.data.profile, groups: resource.data.profile.groups.filter(value => value.name !== group) })) setGroup('全部服务');
+        if (await save(profile => ({ ...profile, groups: profile.groups.filter(value => value.name !== group) }))) setGroup('全部服务');
       }
     }
   };
@@ -79,10 +83,15 @@ export default function WishlistPage() {
     if (!groups.length) { await newGroup(); return; }
     const result = await Taro.showActionSheet({ itemList: ['不分组', ...groups.map(value => value.name)] }).catch(() => null);
     if (!result) return;
-    await save({ ...resource.data.profile, groups: groups.map((value, index) => ({
-      ...value, service_ids: index === result.tapIndex - 1
-        ? [...new Set([...value.service_ids, item.id])] : value.service_ids.filter(id => id !== item.id),
-    })) });
+    const selectedName = groups[result.tapIndex - 1]?.name;
+    await save(profile => {
+      if (!profile.service_ids.includes(item.id)) throw new Error('该服务已取消收藏，请刷新后重试');
+      if (selectedName && !profile.groups.some(value => value.name === selectedName)) throw new Error('该分组已删除，请刷新后重试');
+      return { ...profile, groups: profile.groups.map(value => ({
+        ...value, service_ids: value.name === selectedName
+          ? [...new Set([...value.service_ids, item.id])] : value.service_ids.filter(id => id !== item.id),
+      })) };
+    });
   };
   const services = useMemo(() => {
     const selectedIds = resource.data.profile.groups.find(value => value.name === group)?.service_ids;
@@ -116,11 +125,14 @@ export default function WishlistPage() {
         {editing && <View className={styles.actions}>
           {group !== '体验' && <Text className={styles.link} onClick={() => void assignGroup(item as Service)}>移动分组</Text>}
           <Text className={styles.link} onClick={async () => {
+            if (saveLock.current) return;
+            const kind = group === '体验' ? 'experience' : 'service';
             const result = await Taro.showModal({ title: '取消收藏', content: item.title });
-            if (!result.confirm) return;
-            const { toggleFavorite } = await import('@/services/api');
-            try { await toggleFavorite(group === '体验' ? 'experience' : 'service', item.id); await resource.refresh(); }
+            if (!result.confirm || saveLock.current) return;
+            saveLock.current = true; setSaving(true);
+            try { await removeFavorite(kind, item.id); await resource.refresh(); }
             catch (error) { showError(error); }
+            finally { saveLock.current = false; setSaving(false); }
           }}>取消收藏</Text>
         </View>}
       </View>)}

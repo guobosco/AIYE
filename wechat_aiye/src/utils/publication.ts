@@ -1,4 +1,52 @@
 export interface PublicationOptions { features: string[]; fees: string[] }
+export interface PublicationHints {
+  titlePlaceholder: string;
+  descriptionPlaceholder: string;
+  categoryTip?: string;
+}
+const HINTS: Record<string, PublicationHints> = {
+  '地陪': {
+    titlePlaceholder: '例如：亚龙湾一日地陪｜含路线规划',
+    descriptionPlaceholder: '写清服务城市、陪同时间、是否含路线规划与门票建议，以及适合的人群。',
+    categoryTip: '地陪类建议标明集合地点、可预约时段和服务人数。',
+  },
+  '摄影': {
+    titlePlaceholder: '例如：三亚海边旅拍｜精修 9 张',
+    descriptionPlaceholder: '写清拍摄场景、时长、交付张数、修图周期和是否支持加急。',
+    categoryTip: '摄影类建议写明设备档位、精修数量和返图时效。',
+  },
+  'DJ气氛组': {
+    titlePlaceholder: '例如：沙滩派对 DJ 暖场｜双人配置',
+    descriptionPlaceholder: '介绍曲风、活动类型、人员分工、设备情况以及可承接时长。',
+    categoryTip: '活动氛围类建议补充设备、主持或互动内容。',
+  },
+  '运动教练': {
+    titlePlaceholder: '例如：晨间燃脂私教｜适合新手',
+    descriptionPlaceholder: '写清训练目标、课时长度、地点、适合人群和所需器材。',
+    categoryTip: '教练类可标明认证背景和擅长方向。',
+  },
+  '私厨': {
+    titlePlaceholder: '例如：4 人海鲜家宴｜到家现做',
+    descriptionPlaceholder: '说明菜系、份量、是否含采购、忌口处理和餐后清洁范围。',
+    categoryTip: '私厨类建议写明人数、菜单风格和是否含食材费。',
+  },
+  '化妆': {
+    titlePlaceholder: '例如：婚礼跟妆｜含试妆一次',
+    descriptionPlaceholder: '写清妆容风格、服务时长、是否含饰品与上门区域。',
+    categoryTip: '妆造类建议说明是否含补妆与跟场时长。',
+  },
+  '技能教学': {
+    titlePlaceholder: '例如：潜水入门理论课｜1 对 1 陪练',
+    descriptionPlaceholder: '说明教学方向、单次时长、适合基础以及课后支持内容。',
+    categoryTip: '教学类建议标注课程目标、适合人群与器材要求。',
+  },
+  '其他服务': {
+    titlePlaceholder: '用一句话概括你的服务',
+    descriptionPlaceholder: '详细介绍服务内容、流程和亮点，帮助用户快速了解并下单。',
+  },
+};
+export const publicationHints = (category?: string): PublicationHints =>
+  HINTS[category || '其他服务'] || HINTS['其他服务'];
 const OPTIONS: Record<string, PublicationOptions> = {
   '地陪': {
     features: ['情绪价值', '纯绿', '可拉手', '熟悉路线', '会安排行程', '会拍照', '会聊天', '英语沟通'],
@@ -37,3 +85,11 @@ export const publicationOptions = (category?: string): PublicationOptions =>
   OPTIONS[category || '其他服务'] || OPTIONS['其他服务'];
 export const normalizePublicationTags = (selected: string[], available: string[]) =>
   available.filter(value => selected.includes(value));
+export const movePublicationImage = (images: string[], from: number, to: number): string[] => {
+  const result = [...images];
+  if (!Number.isInteger(from) || !Number.isInteger(to)
+    || from < 0 || to < 0 || from >= result.length || to >= result.length) return result;
+  const [image] = result.splice(from, 1);
+  result.splice(to, 0, image);
+  return result;
+};

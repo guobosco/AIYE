@@ -24,6 +24,8 @@ swiftc -parse-as-library \
     "$SOURCE/Core/Network/APIClient.swift" \
     "$SOURCE/Core/Network/APIError.swift" \
     "$SOURCE/Core/Auth/TokenStore.swift" \
+    "$SOURCE/Core/Auth/CurrentUserStore.swift" \
+    "$SOURCE/App/AppSession.swift" \
     "$SOURCE/Core/Storage/ContactGroupData.swift" \
     "$SOURCE/Core/Support/AppMediaURL.swift" \
     "$SOURCE/Domain/DTO/"*.swift \

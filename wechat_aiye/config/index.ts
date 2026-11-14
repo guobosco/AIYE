@@ -1,17 +1,18 @@
-import { defineConfig } from '@tarojs/cli';
+import { resolve } from 'node:path';
+import { defineConfig, type UserConfigExport } from '@tarojs/cli';
 import devConfig from './dev';
 import prodConfig from './prod';
 
-export default defineConfig(async (merge, { command, mode }) => {
-  const baseConfig = {
+export default defineConfig<'vite'>(async (merge, { command, mode }) => {
+  const baseConfig: UserConfigExport<'vite'> = {
     projectName: 'wechat_aiye',
     date: '2026-06-11',
     designWidth: 750,
     sourceRoot: 'src',
-    outputRoot: 'dist',
+    outputRoot: process.env.TARO_OUTPUT_DIR || 'dist',
     plugins: [],
     alias: {
-      '@': '/src',
+      '@': resolve(__dirname, '..', 'src'),
     },
     framework: 'react',
     compiler: {
@@ -35,6 +36,16 @@ export default defineConfig(async (merge, { command, mode }) => {
     h5: {
       publicPath: '/',
       staticDirectory: 'static',
+      postcss: {
+        pxtransform: { enable: true, config: {} },
+        cssModules: {
+          enable: true,
+          config: {
+            namingPattern: 'module',
+            generateScopedName: '[name]__[local]___[hash:base64:5]',
+          },
+        },
+      },
     },
   };
 

@@ -1,5 +1,6 @@
 import Taro from '@tarojs/taro';
-import { getSession, logout, setSession } from '@/store/session';
+import { getSession, getSessionGeneration, logout, refreshSession, setSession, updateSessionUser } from '@/store/session';
+import { normalizeServiceCategory, uniqueId } from '@/utils/catalog';
 import type {
   CatalogItem, ChatMessage, ConversationItem, Experience, ItemKind,
   MessageInput, Service, UploadResult, User, WishlistProfile,
@@ -19,22 +20,24 @@ const errorText = (data: unknown) => {
   }
   return '请求失败，请稍后重试';
 };
-let refreshTask: Promise<void> | undefined;
+let refreshTask: { generation: number; promise: Promise<void> } | undefined;
 const refreshAccess = () => {
-  if (refreshTask) return refreshTask;
+  const generation = getSessionGeneration();
+  if (refreshTask?.generation === generation) return refreshTask.promise;
   const session = getSession();
-  refreshTask = (async () => {
+  const promise = (async () => {
     if (!session.refreshToken) throw new ApiError(401, '请重新登录');
     const response = await Taro.request<TokenResponse>({
       url: `${API_BASE}/auth/refresh`, method: 'POST', timeout: 20000,
       data: { refresh_token: session.refreshToken }, header: { 'Content-Type': 'application/json' },
     });
     if (response.statusCode !== 200 || !response.data.access_token) throw new ApiError(401, '登录已失效');
-    if (getSession().token === session.token) {
-      setSession(response.data.access_token, session.user, response.data.refresh_token || '');
+    if (!refreshSession(response.data.access_token, response.data.refresh_token || '', session.token, generation)) {
+      throw new ApiError(409, '账号已切换，请重新操作');
     }
-  })().finally(() => { refreshTask = undefined; });
-  return refreshTask;
+  })().finally(() => { if (refreshTask?.promise === promise) refreshTask = undefined; });
+  refreshTask = { generation, promise };
+  return promise;
 };
 export const request = async <T>(
   path: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
@@ -43,6 +46,7 @@ export const request = async <T>(
   if (!API_BASE) throw new ApiError(0, '未配置服务器地址');
   try {
     const session = getSession();
+    const generation = getSessionGeneration();
     const token = session.token;
     const response = await Taro.request<T>({
       url: `${API_BASE}${path}`, method, data, timeout: 20000,
@@ -51,15 +55,16 @@ export const request = async <T>(
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
     });
-    if (token && getSession().user?.id !== session.user?.id) throw new ApiError(409, '账号已切换，请重新操作');
+    if (getSessionGeneration() !== generation) throw new ApiError(409, '账号已切换，请重新操作');
     if (response.statusCode < 200 || response.statusCode >= 300) {
       if (response.statusCode === 401 && token && retry
         && !['/auth/token', '/auth/refresh', '/auth/logout', '/auth/logout-all'].includes(path)) {
         try {
           if (getSession().token === token) await refreshAccess();
+          if (getSessionGeneration() !== generation) throw new ApiError(409, '账号已切换，请重新操作');
           return await request<T>(path, method, data, form, false);
         } catch (error) {
-          if (error instanceof ApiError && error.status === 401 && getSession().user?.id === session.user?.id) logout();
+          if (error instanceof ApiError && error.status === 401 && getSessionGeneration() === generation) logout();
           throw error;
         }
       }
@@ -90,6 +95,7 @@ export const mediaUrl = (value?: string) => {
 };
 export const upload = async (filePath: string, kind: 'avatar' | ItemKind | 'chat', retry = true): Promise<UploadResult> => {
   const session = getSession();
+  const generation = getSessionGeneration();
   const token = session.token;
   if (!token) throw new ApiError(401, '请先登录');
   const path = kind === 'avatar' ? '/upload/avatar' : `/${kind}/upload`;
@@ -97,13 +103,14 @@ export const upload = async (filePath: string, kind: 'avatar' | ItemKind | 'chat
     url: `${API_BASE}${path}`, filePath, name: 'file',
     header: { Authorization: `Bearer ${token}` }, timeout: 60000,
   });
-  if (getSession().user?.id !== session.user?.id) throw new ApiError(409, '账号已切换，请重新上传');
+  if (getSessionGeneration() !== generation) throw new ApiError(409, '账号已切换，请重新上传');
   if (result.statusCode === 401 && retry) {
     try {
       if (getSession().token === token) await refreshAccess();
+      if (getSessionGeneration() !== generation) throw new ApiError(409, '账号已切换，请重新上传');
       return await upload(filePath, kind, false);
     } catch (error) {
-      if (error instanceof ApiError && error.status === 401 && getSession().user?.id === session.user?.id) logout();
+      if (error instanceof ApiError && error.status === 401 && getSessionGeneration() === generation) logout();
       throw error;
     }
   }
@@ -159,12 +166,14 @@ export const login = async (phone: string, password: string) => {
     `username=${encodeURIComponent(phone)}&password=${encodeURIComponent(password)}`, true);
   // The profile request needs the token; login is complete only after it returns.
   setSession(result.access_token, null, result.refresh_token || '');
+  const generation = getSessionGeneration();
   try {
     const user = await request<User>('/auth/me');
-    setSession(result.access_token, user, result.refresh_token || '');
+    if (getSessionGeneration() !== generation) throw new ApiError(409, '账号已切换，请重新登录');
+    updateSessionUser(user);
     console.info('[Auth] Login succeeded');
     return user;
-  } catch (error) { logout(); throw error; }
+  } catch (error) { if (getSessionGeneration() === generation) logout(); throw error; }
 };
 export const loginWithPhone = async (phone: string, code: string) => {
   const result = await request<AuthResponse>('/auth/phone/login', 'POST', { phone_number: phone, verify_code: code });
@@ -173,7 +182,9 @@ export const loginWithPhone = async (phone: string, code: string) => {
 };
 export const loginWithWeChat = async () => {
   if (process.env.TARO_ENV !== 'weapp') throw new ApiError(0, '微信快捷登录仅在微信小程序中可用');
+  const generation = getSessionGeneration();
   const credential = await Taro.login({});
+  if (getSessionGeneration() !== generation) throw new ApiError(409, '账号已切换，请重新登录');
   const result = await request<AuthResponse>('/auth/wechat/miniapp/login', 'POST', { code: credential.code });
   setSession(result.access_token, result.user, result.refresh_token || '');
   return result;
@@ -181,9 +192,9 @@ export const loginWithWeChat = async () => {
 export const sendPhoneCode = (phone: string, scene: 'login' | 'register' | 'bind_wechat_phone') =>
   request<{ success: boolean; cooldown_seconds: number }>('/auth/phone/send-code', 'POST', { phone_number: phone, scene });
 export const logoutRemote = async (all = false) => {
-  const token = getSession().token;
+  const generation = getSessionGeneration();
   try { await request(all ? '/auth/logout-all' : '/auth/logout', 'POST', {}); }
-  finally { if (getSession().token === token) logout(); }
+  finally { if (getSessionGeneration() === generation) logout(); }
 };
 export const getWishlist = () => request<WishlistProfile>('/me/wishlist/profile');
 export const saveWishlist = (profile: WishlistProfile) =>
@@ -192,32 +203,64 @@ export const getExperienceFavorites = async () =>
   (await request<{ experience_ids: string[] }>('/me/wishlist/experiences')).experience_ids;
 
 let favoriteQueue: Promise<unknown> = Promise.resolve();
-export const toggleFavorite = (kind: ItemKind, id: string): Promise<boolean> => {
+const queueFavorite = <T>(operation: () => Promise<T>): Promise<T> => {
   const userId = getSession().user?.id;
-  // Serialize read-modify-write updates so rapid taps cannot overwrite each other.
+  const generation = getSessionGeneration();
   const task = favoriteQueue.catch(() => undefined).then(async () => {
-    if (!userId || getSession().user?.id !== userId) throw new ApiError(401, '请登录后重新收藏');
-    if (kind === 'experience') {
-      const ids = await getExperienceFavorites();
-      const active = !ids.includes(id);
-      await request('/me/wishlist/experiences', 'PUT', {
-        experience_ids: active ? [...ids, id] : ids.filter(value => value !== id),
-      });
-      return active;
-    }
-    const profile = await getWishlist();
-    const active = !profile.service_ids.includes(id);
-    profile.service_ids = active ? [...profile.service_ids, id] : profile.service_ids.filter(value => value !== id);
-    if (!active) profile.groups = profile.groups.map(group => ({
-      ...group, service_ids: group.service_ids.filter(value => value !== id),
-    }));
-    await saveWishlist(profile);
-    return active;
+    if (!userId || getSessionGeneration() !== generation) throw new ApiError(401, '请登录后重新收藏');
+    return operation();
   });
   favoriteQueue = task;
   return task;
 };
-export const getConversations = () => request<ConversationItem[]>('/chat/conversations');
+// Group edits and favorite toggles share one queue and always read the latest profile.
+export const updateWishlist = (update: (profile: WishlistProfile) => WishlistProfile) =>
+  queueFavorite(async () => saveWishlist(update(await getWishlist())));
+const changeFavorite = (kind: ItemKind, id: string, desired?: boolean, category?: string): Promise<boolean> =>
+  queueFavorite(async () => {
+    if (kind === 'experience') {
+      const ids = await getExperienceFavorites();
+      const active = desired ?? !ids.includes(id);
+      await request('/me/wishlist/experiences', 'PUT', {
+        experience_ids: active ? [...new Set([...ids, id])] : ids.filter(value => value !== id),
+      });
+      return active;
+    }
+    const profile = await getWishlist();
+    const active = desired ?? !profile.service_ids.includes(id);
+    profile.service_ids = active ? [...new Set([...profile.service_ids, id])] : profile.service_ids.filter(value => value !== id);
+    if (!active) profile.groups = profile.groups.map(group => ({
+      ...group, service_ids: group.service_ids.filter(value => value !== id),
+    }));
+    else if (category !== undefined) {
+      const name = normalizeServiceCategory(category);
+      const target = profile.groups.find(group => group.name.toLowerCase() === name.toLowerCase());
+      profile.groups = profile.groups.map(group => ({
+        ...group, service_ids: group === target
+          ? [...new Set([...group.service_ids, id])] : group.service_ids.filter(value => value !== id),
+      }));
+      if (!target) profile.groups.push({ name, service_ids: [id] });
+    }
+    await saveWishlist(profile);
+    return active;
+  });
+export const toggleFavorite = (kind: ItemKind, id: string, category?: string) => changeFavorite(kind, id, undefined, category);
+export const removeFavorite = (kind: ItemKind, id: string) => changeFavorite(kind, id, false);
+export const getConversations = async () => {
+  const generation = getSessionGeneration();
+  const result = new Map<string, ConversationItem>();
+  const pageSize = 100;
+  let skip = 0;
+  while (true) {
+    const page = await request<ConversationItem[]>(`/chat/conversations?skip=${skip}&limit=${pageSize}`);
+    if (getSessionGeneration() !== generation) throw new ApiError(409, '账号已切换，请重新加载');
+    const previousSize = result.size;
+    page.forEach(item => result.set(item.conversation.id, item));
+    // Stop on repeated pages as well, for older servers that ignore pagination.
+    if (page.length < pageSize || result.size === previousSize) return [...result.values()];
+    skip += page.length;
+  }
+};
 export const createConversation = (peerId: string) =>
   request<ConversationItem>(`/chat/conversations/direct/${encodeURIComponent(peerId)}`, 'POST');
 export const getMessages = (id: string, before?: number) =>
@@ -237,6 +280,8 @@ export const getConversationStarter = async (id: string): Promise<string> => {
   return '';
 };
 export const sendMessage = (id: string, body: MessageInput) =>
-  request<ChatMessage>(`/chat/conversations/${encodeURIComponent(id)}/messages`, 'POST', body);
+  request<ChatMessage>(`/chat/conversations/${encodeURIComponent(id)}/messages`, 'POST', {
+    ...body, client_message_id: body.client_message_id || uniqueId(),
+  });
 export const markRead = (id: string, messageId?: string) =>
   request(`/chat/conversations/${encodeURIComponent(id)}/read`, 'POST', { message_id: messageId });

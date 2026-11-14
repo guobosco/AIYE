@@ -23,6 +23,7 @@ import com.example.aiye.data.model.ChatMessageCreateRequest
 import com.example.aiye.data.model.ChatReadRequest
 import com.example.aiye.data.model.ChatSocketEvent
 import com.example.aiye.data.model.ChatUploadResponse
+import com.example.aiye.data.model.ConversationListItem
 import com.example.aiye.data.model.BookedServiceRecord
 import com.example.aiye.data.model.HostIncomingOrder
 import com.example.aiye.data.model.Service
@@ -1065,10 +1066,22 @@ class LuluRepository(
         if (userId.isBlank()) return
         withContext(Dispatchers.IO) {
             try {
-                val items = apiService?.getChatConversations() ?: emptyList()
+                val api = apiService ?: return@withContext
+                val items = linkedMapOf<String, ConversationListItem>()
+                var skip = 0
+                val pageSize = 100
+                while (true) {
+                    val page = api.getChatConversations(skip = skip, limit = pageSize)
+                    if (currentUserId != userId) return@withContext
+                    val previousSize = items.size
+                    page.forEach { items[it.conversation.id] = it }
+                    // Repeated pages also terminate safely against older, unpaginated servers.
+                    if (page.size < pageSize || items.size == previousSize) break
+                    skip += page.size
+                }
                 conversationDao.deleteByUser(userId)
                 conversationMemberDao.deleteByUser(userId)
-                items.forEach { item ->
+                items.values.forEach { item ->
                     conversationDao.insertConversation(item.conversation.copy(currentUserId = userId))
                     item.member?.let { conversationMemberDao.insertMember(it.copy(currentUserId = userId)) }
                     item.peer?.let { peer ->
@@ -1190,7 +1203,8 @@ class LuluRepository(
         attachmentName: String = "",
         attachmentSize: Long = 0L,
         objectKey: String = "",
-        extra: Map<String, String> = emptyMap()
+        extra: Map<String, String> = emptyMap(),
+        clientMessageId: String = UUID.randomUUID().toString()
     ): ChatMessage? = withContext(Dispatchers.IO) {
         try {
             val request = ChatMessageCreateRequest(
@@ -1200,7 +1214,8 @@ class LuluRepository(
                 attachmentName = attachmentName,
                 attachmentSize = attachmentSize,
                 objectKey = objectKey,
-                extra = extra
+                extra = extra,
+                clientMessageId = clientMessageId
             )
             val message = apiService?.sendChatMessage(
                 conversationId = conversationId,
@@ -1214,7 +1229,7 @@ class LuluRepository(
                 attachmentSize = attachmentSize,
                 objectKey = objectKey,
                 extra = extra
-            )
+            ).copy(clientMessageId = clientMessageId)
             chatMessageDao.insertMessage(message.copy(currentUserId = currentUserId))
             fetchAndSyncConversations()
             message
@@ -1229,7 +1244,7 @@ class LuluRepository(
                 attachmentSize = attachmentSize,
                 objectKey = objectKey,
                 extra = extra
-            )
+            ).copy(clientMessageId = clientMessageId)
             chatMessageDao.insertMessage(fallback.copy(currentUserId = currentUserId))
             fallback
         }

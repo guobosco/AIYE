@@ -1,13 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Taro from '@tarojs/taro';
 import { Checkbox, Input, Text, View } from '@tarojs/components';
 import { login, loginWithPhone, loginWithWeChat, request, sendPhoneCode, showError } from '@/services/api';
 import { uniqueId } from '@/utils/catalog';
 import { ActionButton } from '@/components/UI';
-import type { User } from '@/types/models';
+import { finishAccountFlow, getSessionGeneration } from '@/store/session';
 import styles from '@/styles/page.module.scss';
 
 export default function LoginPage() {
+  const operation = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
@@ -22,20 +28,19 @@ export default function LoginPage() {
     const timer = setTimeout(() => setCooldown(value => Math.max(0, value - 1)), 1000);
     return () => clearTimeout(timer);
   }, [cooldown]);
-  const finish = (user: User, bind = false) => {
-    if (bind) { void Taro.redirectTo({ url: '/pages/bind-phone/index' }); return; }
-    if (!user.is_profile_completed) { void Taro.redirectTo({ url: '/pages/profile-edit/index' }); return; }
-    void Taro.navigateBack({ fail: () => Taro.switchTab({ url: '/pages/mine/index' }) });
-  };
   const sendCode = async () => {
-    if (busy || cooldown) return;
+    if (operation.current || cooldown) return;
     if (!/^1[3-9]\d{9}$/.test(phone)) { void Taro.showToast({ title: '请输入正确的手机号', icon: 'none' }); return; }
-    setBusy(true);
-    try { const result = await sendPhoneCode(phone, registering ? 'register' : 'login'); setCooldown(result.cooldown_seconds || 60); }
-    catch (error) { showError(error); } finally { setBusy(false); }
+    operation.current = true; setBusy(true);
+    const generation = getSessionGeneration();
+    try {
+      const result = await sendPhoneCode(phone, registering ? 'register' : 'login');
+      if (mounted.current && getSessionGeneration() === generation) setCooldown(result.cooldown_seconds || 60);
+    } catch (error) { if (mounted.current && getSessionGeneration() === generation) showError(error); }
+    finally { operation.current = false; if (mounted.current) setBusy(false); }
   };
   const submit = async () => {
-    if (busy) return;
+    if (operation.current) return;
     if (!/^1[3-9]\d{9}$/.test(phone)) { void Taro.showToast({ title: '请输入正确的手机号', icon: 'none' }); return; }
     if ((!sms || registering) && (!password || (registering && password.length < 6))) { void Taro.showToast({ title: registering ? '密码至少6位' : '请输入密码', icon: 'none' }); return; }
     if ((!sms || registering) && encodeURIComponent(password).replace(/%[A-F\d]{2}/gi, '_').length > 72) {
@@ -44,7 +49,8 @@ export default function LoginPage() {
     if ((sms || registering) && !/^\d{6}$/.test(code)) { void Taro.showToast({ title: '请输入6位验证码', icon: 'none' }); return; }
     if (!agreed) { void Taro.showToast({ title: '请确认账号使用说明', icon: 'none' }); return; }
     if (registering && !name.trim()) { void Taro.showToast({ title: '请输入姓名或昵称', icon: 'none' }); return; }
-    setBusy(true);
+    operation.current = true; setBusy(true);
+    const generation = getSessionGeneration();
     try {
       if (registering) {
         const now = Date.now();
@@ -52,10 +58,14 @@ export default function LoginPage() {
           verify_code: code, name: name.trim(), pei_pei_id: '', photo_url: '', is_profile_completed: false, created_at: now, updated_at: now });
       }
       if (sms && !registering) {
-        const result = await loginWithPhone(phone, code); finish(result.user, result.need_bind_phone);
-      } else finish(await login(phone, password));
-    } catch (error) { showError(error); }
-    finally { setBusy(false); }
+        const result = await loginWithPhone(phone, code);
+        if (mounted.current) await finishAccountFlow(result.user, generation + 1, result.need_bind_phone);
+      } else {
+        const user = await login(phone, password);
+        if (mounted.current) await finishAccountFlow(user, generation + 1);
+      }
+    } catch (error) { if (mounted.current) showError(error); }
+    finally { operation.current = false; if (mounted.current) setBusy(false); }
   };
   return <View className={styles.page}>
     <View className={styles.section}><Text className={styles.title}>{registering ? '注册爱野' : '登录爱野'}</Text></View>
@@ -75,15 +85,19 @@ export default function LoginPage() {
         <Checkbox value="agreed" checked={agreed} color="#E0115F" /><Text className={styles.muted}>我确认使用本人账号，不发布违法或虚假内容。</Text>
       </View>
       <View className={styles.actions}><View><ActionButton loading={busy} onClick={() => void submit()}>{registering ? '注册并登录' : '登录'}</ActionButton></View></View>
-      {!registering && <Text className={styles.link} onClick={() => { setSms(value => !value); setCode(''); }}>{sms ? '使用密码登录' : '使用短信验证码登录'}</Text>}
+      {!registering && <Text className={styles.link} onClick={() => { if (operation.current) return; setSms(value => !value); setCode(''); }}>{sms ? '使用密码登录' : '使用短信验证码登录'}</Text>}
       {process.env.TARO_ENV === 'weapp' && <ActionButton outline loading={busy} onClick={async () => {
-        if (busy) return;
+        if (operation.current) return;
         if (!agreed) { void Taro.showToast({ title: '请确认账号使用说明', icon: 'none' }); return; }
-        setBusy(true);
-        try { const result = await loginWithWeChat(); finish(result.user, result.need_bind_phone); }
-        catch (error) { showError(error); } finally { setBusy(false); }
+        operation.current = true; setBusy(true);
+        const generation = getSessionGeneration();
+        try {
+          const result = await loginWithWeChat();
+          if (mounted.current) await finishAccountFlow(result.user, generation + 1, result.need_bind_phone);
+        } catch (error) { if (mounted.current) showError(error); }
+        finally { operation.current = false; if (mounted.current) setBusy(false); }
       }}>微信快捷登录</ActionButton>}
-      <Text className={styles.link} onClick={() => { setRegistering(value => !value); setPassword(''); setCode(''); }}>
+      <Text className={styles.link} onClick={() => { if (operation.current) return; setRegistering(value => !value); setPassword(''); setCode(''); }}>
         {registering ? '已有账号，去登录' : '没有账号，去注册'}
       </Text>
     </View>

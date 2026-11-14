@@ -11,10 +11,15 @@ export const DECLARATIONS = [
 export const FEATURE_TAGS = ['新手友好', '亲子友好', '情侣适合', '团建适合', '可上门', '到店服务', '线上沟通',
   '可定制', '夜间友好', '英文沟通', '一对一', '会引导', '路线熟悉', '当日返图', '可修图', '情绪价值', '控场互动', '忌口可调'];
 export const EXTRA_FEE_TAGS = ['交通费', '门票费', '场地费', '食材费', '设备租赁', '超时费用', '节假日加价'];
+export const normalizeServiceCategory = (raw?: string) => {
+  const value = raw?.trim() || '';
+  return [...SERVICE_CATEGORIES, ...EXPERIENCE_CATEGORIES.filter(name => name !== '其他体验')].includes(value)
+    ? value : '其他服务';
+};
 export const categoryOf = (item: CatalogItem, kind: ItemKind) => {
   const value = item.category?.trim();
   if (kind === 'experience') return value || '其他体验';
-  return value && [...SERVICE_CATEGORIES, ...EXPERIENCE_CATEGORIES].includes(value) ? value : '其他服务';
+  return normalizeServiceCategory(value);
 };
 export const displayLocation = (raw?: string) => (raw || '').split('|||PEIPEI_GEO1|||')[0].trim();
 export const cityLocation = (raw: string) => {
@@ -28,6 +33,19 @@ export const cityLocation = (raw: string) => {
 export const ratingText = (rating?: number) => rating && rating > 0 ? `★ ${rating.toFixed(2)}分` : '';
 export const homeMeta = (item: CatalogItem) =>
   [cityLocation(item.location), ratingText(item.average_rating)].filter(Boolean).join('  ');
+export const homeServiceCoverHeight = (id: string) => {
+  let hash = 0;
+  for (let index = 0; index < id.length; index++) hash = (Math.imul(hash, 31) + id.charCodeAt(index)) | 0;
+  return [336, 384, 432, 476][Math.abs(hash) % 4];
+};
+export const experienceSections = (items: Experience[]): [string, Experience[]][] => {
+  const groups = new Map<string, Experience[]>();
+  [...items].sort((a, b) => b.updated_at - a.updated_at || b.created_at - a.created_at).forEach(item => {
+    const category = categoryOf(item, 'experience');
+    groups.set(category, [...(groups.get(category) || []), item]);
+  });
+  return [...groups.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+};
 export const sortCatalog = <T extends CatalogItem>(items: T[]): T[] => [...items].sort((a, b) =>
   (b.sort_priority || 0) - (a.sort_priority || 0)
   || Number(Boolean(b.is_important)) - Number(Boolean(a.is_important))
