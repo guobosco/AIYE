@@ -46,8 +46,10 @@ except ImportError:
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
-ADMIN_STATIC_DIR = os.path.join(STATIC_DIR, "admin")
-ADMIN_INDEX_PATH = os.path.join(ADMIN_STATIC_DIR, "index.html")
+ADMIN_WEB_DIR = os.path.abspath(
+    os.getenv("LULU_ADMIN_WEB_DIR") or os.path.join(os.path.dirname(BASE_DIR), "admin_web")
+)
+ADMIN_INDEX_PATH = os.path.join(ADMIN_WEB_DIR, "index.html")
 AVATAR_DIR = os.path.join(STATIC_DIR, "avatars")
 CHAT_MEDIA_DIR = os.path.join(STATIC_DIR, "chat")
 SERVICE_MEDIA_DIR = os.path.join(STATIC_DIR, "services")
@@ -1143,11 +1145,13 @@ with SessionLocal() as seed_db:
 app = FastAPI()
 
 # --- 静态资源目录配置 ---
-os.makedirs(ADMIN_STATIC_DIR, exist_ok=True)
 os.makedirs(AVATAR_DIR, exist_ok=True)
 os.makedirs(CHAT_MEDIA_DIR, exist_ok=True)
 os.makedirs(SERVICE_MEDIA_DIR, exist_ok=True)
 os.makedirs(EXPERIENCE_MEDIA_DIR, exist_ok=True)
+# Preserve existing asset URLs while keeping frontend files outside the backend.
+if os.path.isdir(ADMIN_WEB_DIR):
+    app.mount("/static/admin", StaticFiles(directory=ADMIN_WEB_DIR), name="admin_static")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
@@ -1888,7 +1892,7 @@ def delete_experience(
 @app.get("/admin")
 @app.get("/admin/")
 def admin_page():
-    if not os.path.exists(ADMIN_INDEX_PATH):
+    if not os.path.isfile(ADMIN_INDEX_PATH):
         raise HTTPException(status_code=404, detail="Admin page not found")
     return FileResponse(ADMIN_INDEX_PATH)
 

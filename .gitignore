@@ -1,0 +1,41 @@
+# OS metadata
+.DS_Store
+._*
+
+# Python environments and generated caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local runtime data and secrets (never delete SQLite WAL as a cache)
+*.db
+*.db-wal
+*.db-shm
+.env
+.env.*
+!.env.example
+
+# Android build outputs
+/android_aiye/.gradle/
+/android_aiye/build/
+/android_aiye/app/build/
+
+# Local debugging and runtime uploads
+/.dbg/
+/.screenshots/
+/backend/experiences/
+/backend/static/chat/
+/backend/static/experiences/
+
+# Xcode generated output and personal workspace state
+DerivedData/
+xcuserdata/
+*.xcuserstate
+
+# Local distribution archives
+/android_aiye.zip
+/backend.zip
+/ios_aiye.zip
