@@ -133,6 +133,25 @@ class BackendOptimizationTests(unittest.TestCase):
                 conversation_id=conversation).all()]
             self.assertEqual(len(set(timestamps)), 5)
 
+    def test_message_cursor_preserves_time_order_and_zero_timestamp(self):
+        owner, _, conversation, headers = self.conversation()
+        prefix = uuid.uuid4().hex
+        with core.SessionLocal() as db:
+            for suffix, timestamp in [("a", 0), ("z", 0), ("m", 1000), ("b", 2000)]:
+                db.add(models.ChatMessage(
+                    id=f"{prefix}-{suffix}", conversation_id=conversation, sender_id=owner,
+                    type="text", content=suffix, extra={}, created_at=timestamp,
+                    updated_at=timestamp, is_deleted=False,
+                ))
+            db.commit()
+        path = f"/chat/conversations/{conversation}/messages"
+        older = self.client.get(path, params={"before": 1000, "before_id": f"{prefix}-m"}, headers=headers)
+        self.assertEqual(older.status_code, 200, older.text)
+        self.assertEqual([item["content"] for item in older.json()], ["a", "z"])
+        zero = self.client.get(path, params={"before": 0, "before_id": f"{prefix}-z"}, headers=headers)
+        self.assertEqual(zero.status_code, 200, zero.text)
+        self.assertEqual([item["content"] for item in zero.json()], ["a"])
+
     def test_message_keys_are_sender_scoped_and_optional_for_old_clients(self):
         owner, peer, conversation, headers = self.conversation()
         path = f"/chat/conversations/{conversation}/messages"

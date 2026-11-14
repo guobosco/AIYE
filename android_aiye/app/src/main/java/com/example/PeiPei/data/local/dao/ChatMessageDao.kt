@@ -37,6 +37,13 @@ interface ChatMessageDao {
         currentUserId: String
     ): ChatMessage?
 
+    @Query(
+        "SELECT * FROM chat_messages " +
+            "WHERE conversationId = :conversationId AND currentUserId = :currentUserId " +
+            "AND id NOT LIKE 'local-%' AND isDeleted = 0 ORDER BY createdAt ASC, id ASC LIMIT 1"
+    )
+    suspend fun getOldestServerMessageByConversation(conversationId: String, currentUserId: String): ChatMessage?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessage(message: ChatMessage)
 

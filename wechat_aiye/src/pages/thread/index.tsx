@@ -5,6 +5,8 @@ import classnames from 'classnames';
 import { API_BASE, getConversations, getItem, getMessages, markRead, mediaUrl, request, sendMessage, showError, upload } from '@/services/api';
 import { getSessionGeneration, requireLogin, useSession } from '@/store/session';
 import { useResource } from '@/hooks/useResource';
+import { readMessageGap } from '@/services/chatHistory';
+import { confirmChatMessages, queueChatMessage, readChatOutbox } from '@/store/chatOutbox';
 import { onboardingDestination } from '@/utils/authentication';
 import { ActionButton, Avatar, StateView } from '@/components/UI';
 import { displayLocation, formatTime, itemUrl, uniqueId } from '@/utils/catalog';
@@ -33,6 +35,7 @@ export default function ThreadPage() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [failedSends, setFailedSends] = useState<FailedSend[]>([]);
+  const [outboxError, setOutboxError] = useState('');
   const [hasMore, setHasMore] = useState(false);
   const [visible, setVisible] = useState(false);
   const [scrollTarget, setScrollTarget] = useState('');
@@ -45,6 +48,7 @@ export default function ThreadPage() {
   const nearBottom = useRef(true);
   const initialized = useRef(false);
   const refreshTask = useRef<{ key: string } | null>(null);
+  const refreshAnchor = useRef<ChatMessage | undefined>(undefined);
   const generation = useRef(0);
   const alive = useRef(true);
   const canRead = !!token && !!user && !onboardingRoute && !!id;
@@ -78,7 +82,7 @@ export default function ThreadPage() {
     void Taro.setNavigationBarTitle({ title }).catch(error => console.error('[Chat] Title update failed', error));
   }, [viewKey, canRead, title]);
   useDidShow(() => setVisible(true));
-  useDidHide(() => setVisible(false));
+  useDidHide(() => { generation.current++; refreshTask.current = null; setVisible(false); });
   useEffect(() => {
     if (process.env.TARO_ENV !== 'weapp') return;
     const onKeyboard = (event: { height: number }) => setKeyboardHeight(Math.max(0, event.height));
@@ -86,10 +90,31 @@ export default function ThreadPage() {
     return () => { Taro.offKeyboardHeightChange(onKeyboard); };
   }, []);
   const activeView = () => alive.current && latestKey.current === viewKey && getSessionGeneration() === loginGeneration;
+  const restoreOutbox = () => {
+    if (!activeView() || !user || !canRead) return;
+    try {
+      if (confirmedSends.current.size) confirmChatMessages(user.id, id, loginGeneration, confirmedSends.current);
+      const restored = readChatOutbox(user.id, id, loginGeneration).map(entry => ({ body: entry.body }));
+      setFailedSends(current => [...new Map([...restored, ...current]
+        .filter(entry => !confirmedSends.current.has(entry.body.client_message_id || ''))
+        .map(entry => [entry.body.client_message_id, entry])).values()]);
+      setOutboxError('');
+    } catch (error) {
+      console.error('[Chat] Outbox restore failed', error);
+      setOutboxError(error instanceof Error ? error.message : '待发送记录读取失败');
+    }
+  };
   const merge = (next: ChatMessage[], scroll = true) => {
     if (!activeView()) return;
     for (const message of next) {
       if (message.sender_id === user?.id && message.client_message_id) confirmedSends.current.add(message.client_message_id);
+    }
+    if (user && confirmedSends.current.size) {
+      try { confirmChatMessages(user.id, id, loginGeneration, confirmedSends.current); }
+      catch (error) {
+        console.error('[Chat] Outbox confirmation failed', error);
+        setOutboxError(error instanceof Error ? error.message : '待发送记录更新失败');
+      }
     }
     setFailedSends(current => current.filter(failed => !confirmedSends.current.has(failed.body.client_message_id || '')));
     const draft = pendingText.current;
@@ -107,12 +132,14 @@ export default function ThreadPage() {
     if (refreshTask.current?.key === viewKey) return;
     const task = { key: viewKey };
     refreshTask.current = task;
+    const isCurrent = () => activeView() && currentGeneration === generation.current && refreshTask.current === task;
     try {
-      const next = await getMessages(id);
-      if (!activeView() || currentGeneration !== generation.current) return;
-      merge(next);
-      if (!initialized.current) { setHasMore(next.length === 100); initialized.current = true; }
-      await markRead(id, next[next.length - 1]?.id);
+      const result = await readMessageGap(id, refreshAnchor.current, isCurrent);
+      if (!isCurrent()) return;
+      merge(result.messages);
+      if (result.latest) refreshAnchor.current = result.latest;
+      if (!initialized.current) { setHasMore(result.hasMore); initialized.current = true; }
+      await markRead(id, result.latest?.id);
       if (!activeView() || currentGeneration !== generation.current) return;
       setError('');
     } catch (err) { if (activeView() && currentGeneration === generation.current) setError(err instanceof Error ? err.message : '加载失败'); }
@@ -125,12 +152,13 @@ export default function ThreadPage() {
     generation.current++;
     alive.current = true;
     initialized.current = false; nearBottom.current = true;
+    refreshAnchor.current = undefined;
     operation.current = null; refreshTask.current = null; textRevision.current++;
-    pendingText.current = null; confirmedSends.current.clear(); setFailedSends([]);
+    pendingText.current = null; confirmedSends.current.clear(); setFailedSends([]); setOutboxError('');
     setMessages([]); setText(''); setBusy(false); setError('');
     setScrollTarget(''); setKeyboardHeight(0); setDataKey(viewKey); setLoading(true); setHasMore(false);
     if (token && user && onboardingRoute) requireLogin();
-    else if (token && user && id) void load();
+    else if (token && user && id) { restoreOutbox(); void load(); }
     return () => { alive.current = false; operation.current = null; };
   }, [viewKey, onboardingRoute, user?.id]);
   useEffect(() => {
@@ -172,7 +200,11 @@ export default function ThreadPage() {
   const send = async (body: MessageInput, task: { key: string; generation: number }, revision?: number) => {
     if (!currentOperation(task)) return false;
     const payload = { ...body, client_message_id: body.client_message_id || uniqueId() };
+    let persisted = false;
     try {
+      if (!user) return false;
+      queueChatMessage(user.id, id, loginGeneration, payload);
+      persisted = true;
       const message = await sendMessage(id, payload);
       if (!currentOperation(task)) return false;
       confirmedSends.current.add(payload.client_message_id);
@@ -183,6 +215,7 @@ export default function ThreadPage() {
       if (!currentOperation(task)) return false;
       // A live/REST confirmation may arrive even when the POST response is lost.
       if (confirmedSends.current.has(payload.client_message_id)) return true;
+      if (!persisted) setOutboxError(err instanceof Error ? err.message : '待发送记录保存失败，未提交消息');
       setFailedSends(current => [...current.filter(failed => failed.body.client_message_id !== payload.client_message_id),
         { body: payload, revision }]);
       showError(err);
@@ -328,6 +361,7 @@ export default function ThreadPage() {
       </View>}
     </View>}
     {error && <View className={styles.notice} onClick={() => void load()}>{error}，点击重试</View>}
+    {outboxError && <View className={styles.notice} onClick={restoreOutbox}>{outboxError}，点击重试待发送记录</View>}
     <ScrollView scrollY className={styles.history} scrollIntoView={scrollTarget}
       onScroll={event => {
         const { scrollHeight, scrollTop } = event.detail;

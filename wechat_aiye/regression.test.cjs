@@ -8,6 +8,9 @@ catch {
 }
 
 const storage = new Map();
+const clearTestOutboxes = () => {
+  for (const key of storage.keys()) if (key.startsWith('aiye.chatOutbox.v1.')) storage.delete(key);
+};
 const listeners = new Map();
 const toasts = [];
 const navigations = [];
@@ -580,6 +583,8 @@ const deferred = () => {
     chatUtils.chatInquiryMeta([linkedMessage], {}).summary, '关于2030年5月1日徒步体验的咨询'));
   check('new inquiry route date takes precedence over previous conversation inquiry', () => assert.equal(
     chatUtils.chatInquiryMeta([linkedMessage], { kind: 'experience', id: 'experience-1', date: '2030年5月2日' }).date, '2030年5月2日'));
+  check('an earlier plain content card does not hide a later real inquiry date', () => assert.equal(
+    chatUtils.chatInquiryMeta([{ extra: { experience_id: 'experience-1', title: '徒步体验' } }, linkedMessage], {}).date, '2030年5月1日'));
   check('unrelated listing messages do not supply a consultation date', () => assert.equal(
     chatUtils.chatInquiryMeta([linkedMessage], { kind: 'service', id: 'different-service' }).date, ''));
   check('native start and end date extras supply the real consultation range', () => assert.equal(
@@ -1240,6 +1245,7 @@ const deferred = () => {
     navigations.at(-1), 'open:/pages/experience-detail/index?id=experience-context'));
   experienceRenderer.unmount();
   routerParams = { id: 'chat-test' };
+  clearTestOutboxes();
   session.setSession('retry-message-login', readyUser, 'refresh');
   const retryBodies = [];
   requestHandler = async options => {
@@ -1273,6 +1279,31 @@ const deferred = () => {
     assert.ok(!hasText(retrySendTree, '消息未确认发送'));
     assert.equal(nodes(retrySendTree).find(node => node.type === 'Input').props.value, '');
   });
+  const repeatBodies = [];
+  requestHandler = async options => {
+    if (options.method === 'POST' && options.url.endsWith('/messages')) {
+      repeatBodies.push(options.data);
+      return repeatBodies.length === 1 ? response({ detail: 'Temporary failure' }, 503)
+        : response({ ...chatMessage(`repeat-${repeatBodies.length}`, options.data.content), client_message_id: options.data.client_message_id });
+    }
+    return response(options.method === 'GET' ? [] : {});
+  };
+  nodes(retrySendTree).find(node => node.type === 'Input').props.onInput({ detail: { value: 'same intentional text' } });
+  retrySendTree = retrySendRenderer.render();
+  action(retrySendTree, '发送').props.onClick();
+  await flushCallbacks();
+  retrySendTree = retrySendRenderer.render();
+  action(retrySendTree, '发送').props.onClick();
+  await flushCallbacks();
+  retrySendTree = retrySendRenderer.render();
+  check('send button retry of an unchanged failed draft reuses the original key', () => assert.deepEqual(repeatBodies[0], repeatBodies[1]));
+  nodes(retrySendTree).find(node => node.type === 'Input').props.onInput({ detail: { value: 'same intentional text' } });
+  retrySendTree = retrySendRenderer.render();
+  action(retrySendTree, '发送').props.onClick();
+  await flushCallbacks();
+  retrySendTree = retrySendRenderer.render();
+  check('a new intentional identical message receives a different key', () => assert.notEqual(
+    repeatBodies[2].client_message_id, repeatBodies[0].client_message_id));
   const changedDraftBodies = [];
   requestHandler = async options => {
     if (options.method === 'POST' && options.url.endsWith('/messages')) {
@@ -1329,8 +1360,9 @@ const deferred = () => {
   session.setSession('retry-message-replacement-login', readyUser, 'refresh');
   retrySendRenderer.render();
   await flushCallbacks();
-  check('same-account re-login clears old resend actions', () => assert.ok(!hasText(retrySendRenderer.render(), '消息未确认发送')));
+  check('same-account re-login restores saved pending messages with new operation identity', () => assert.ok(hasText(retrySendRenderer.render(), '消息未确认发送')));
   retrySendRenderer.unmount();
+  clearTestOutboxes();
 
   const liveSendWait = deferred();
   let liveSendBody;
@@ -1360,6 +1392,198 @@ const deferred = () => {
   check('confirmed delivery still clears only its own draft', () => assert.equal(
     nodes(liveConfirmationTree).find(node => node.type === 'Input').props.value, ''));
   liveConfirmationRenderer.unmount();
+  clearTestOutboxes();
+  const outbox = load('src/store/chatOutbox.ts');
+  const owner = readyUser.id, outboxConversation = 'outbox/unit';
+  const outboxKey = `aiye.chatOutbox.v1.${encodeURIComponent(owner)}.${encodeURIComponent(outboxConversation)}`;
+  let outboxGeneration = session.getSessionGeneration();
+  const storedPayload = { type: 'image', content: '图片', client_message_id: 'persisted-image',
+    attachment_url: '/static/persisted.jpg', object_key: 'persisted-object', extra: { mime_type: 'image/jpeg' } };
+  outbox.queueChatMessage(owner, outboxConversation, outboxGeneration, storedPayload);
+  check('outbox stores complete attachment payload before sending', () => assert.deepEqual(
+    outbox.readChatOutbox(owner, outboxConversation, outboxGeneration)[0].body, storedPayload));
+  outbox.queueChatMessage(owner, outboxConversation, outboxGeneration, storedPayload);
+  check('queueing the same message ID and body is idempotent', () => assert.equal(
+    outbox.readChatOutbox(owner, outboxConversation, outboxGeneration).length, 1));
+  check('the same message ID cannot be reused for another payload', () => assert.throws(
+    () => outbox.queueChatMessage(owner, outboxConversation, outboxGeneration, { ...storedPayload, content: 'different' }), /另一条/));
+  const mutatedRead = outbox.readChatOutbox(owner, outboxConversation, outboxGeneration);
+  mutatedRead[0].body.extra.mime_type = 'changed';
+  check('reading pending records cannot mutate stored payloads', () => assert.equal(
+    outbox.readChatOutbox(owner, outboxConversation, outboxGeneration)[0].body.extra.mime_type, 'image/jpeg'));
+  check('pending records are isolated by conversation', () => assert.equal(
+    outbox.readChatOutbox(owner, 'other-conversation', outboxGeneration).length, 0));
+  const beforeAccountSwitch = JSON.stringify(storage.get(outboxKey));
+  session.setSession('outbox-other-login', otherUser, 'refresh');
+  check('another account cannot read the previous account outbox', () => assert.throws(
+    () => outbox.readChatOutbox(owner, outboxConversation, session.getSessionGeneration()), /登录状态/));
+  check('old callbacks cannot queue into a replacement account', () => assert.throws(
+    () => outbox.queueChatMessage(owner, outboxConversation, outboxGeneration, storedPayload), /登录状态/));
+  check('old confirmation cannot delete saved records after account changes', () => assert.throws(
+    () => outbox.confirmChatMessages(owner, outboxConversation, outboxGeneration, new Set(['persisted-image'])), /登录状态/));
+  check('account switching does not modify another account pending payloads', () => assert.equal(
+    JSON.stringify(storage.get(outboxKey)), beforeAccountSwitch));
+  session.setSession('outbox-return-login', readyUser, 'refresh');
+  outboxGeneration = session.getSessionGeneration();
+  cache.delete(path.resolve(__dirname, 'src/store/chatOutbox.ts'));
+  const coldOutbox = load('src/store/chatOutbox.ts');
+  check('a fresh outbox module recovers records under a new login generation', () => assert.deepEqual(
+    coldOutbox.readChatOutbox(owner, outboxConversation, outboxGeneration)[0].body, storedPayload));
+  check('outbox data stores neither tokens nor login-generation identities', () => {
+    assert.ok(!JSON.stringify(storage.get(outboxKey)).includes('outbox-return-login'));
+    assert.ok(!('generation' in storage.get(outboxKey)));
+  });
+  const validOutbox = storage.get(outboxKey);
+  storage.set(outboxKey, { ...validOutbox, entries: [{ body: { ...storedPayload, extra: { bad: 42 } }, createdAt: 1 }] });
+  const corruptOutbox = JSON.stringify(storage.get(outboxKey));
+  check('corrupt pending payloads are rejected instead of silently replaced', () => assert.throws(
+    () => coldOutbox.queueChatMessage(owner, outboxConversation, outboxGeneration, storedPayload), /格式异常/));
+  check('corrupt storage remains intact for recovery', () => assert.equal(JSON.stringify(storage.get(outboxKey)), corruptOutbox));
+  storage.set(outboxKey, validOutbox);
+  coldOutbox.confirmChatMessages(owner, outboxConversation, outboxGeneration, new Set(['persisted-image']));
+  check('confirmed delivery removes its persistent pending record', () => assert.ok(!storage.has(outboxKey)));
+  for (let index = 0; index < 100; index++) {
+    coldOutbox.queueChatMessage(owner, outboxConversation, outboxGeneration, { type: 'text', content: String(index), client_message_id: `capacity-${index}` });
+  }
+  check('capacity overflow is explicit and does not discard older unsent messages', () => {
+    assert.throws(() => coldOutbox.queueChatMessage(owner, outboxConversation, outboxGeneration,
+      { type: 'text', content: 'overflow', client_message_id: 'overflow' }), /空间不足/);
+    assert.equal(coldOutbox.readChatOutbox(owner, outboxConversation, outboxGeneration).length, 100);
+  });
+  check('oversized records are rejected before writing storage', () => assert.throws(
+    () => coldOutbox.queueChatMessage(owner, 'oversized', outboxGeneration,
+      { type: 'text', content: 'x'.repeat(150001), client_message_id: 'oversized' }), /空间不足/));
+  clearTestOutboxes();
+
+  const history = load('src/services/chatHistory.ts');
+  const gapRows = Array.from({ length: 351 }, (_, index) => ({
+    ...chatMessage(`gap-${String(index).padStart(4, '0')}`, `gap content ${index}`), created_at: 1000,
+  }));
+  let gapReads = 0;
+  const gapHandler = async options => {
+    if (!options.url.includes('/messages?')) return response(options.method === 'GET' ? [] : {});
+    gapReads++;
+    const cursor = new URL(options.url).searchParams.get('before_id');
+    return response(gapRows.filter(row => !cursor || row.id < cursor).slice(-100));
+  };
+  requestHandler = gapHandler;
+  const initialGap = await history.readMessageGap('chat-test', undefined, () => true);
+  check('first chat entry loads only the latest page', () => {
+    assert.equal(initialGap.messages.length, 100); assert.equal(gapReads, 1); assert.equal(initialGap.hasMore, true);
+  });
+  gapReads = 0;
+  const filledGap = await history.readMessageGap('chat-test', gapRows[0], () => true);
+  check('catch-up retrieves more than three pages of same-timestamp messages', () => {
+    assert.equal(gapReads, 4); assert.equal(filledGap.messages.length, 351);
+    assert.equal(new Set(filledGap.messages.map(row => row.id)).size, 351);
+  });
+  check('catch-up result is chronologically stable with the original newest watermark', () => {
+    assert.deepEqual(filledGap.messages.map(row => row.id), gapRows.map(row => row.id));
+    assert.equal(filledGap.latest.id, gapRows.at(-1).id);
+  });
+  requestHandler = async options => {
+    if (!options.url.includes('/messages?')) return response([]);
+    const cursor = new URL(options.url).searchParams.get('before_id');
+    return response(gapRows.filter(row => row.id !== gapRows[0].id && (!cursor || row.id < cursor)).slice(-100));
+  };
+  const deletedAnchorGap = await history.readMessageGap('chat-test', gapRows[0], () => true);
+  check('a deleted watermark message does not prevent catch-up completion', () => assert.equal(deletedAnchorGap.messages.length, 350));
+  requestHandler = async () => response(gapRows.slice(-100));
+  let stalledGapError;
+  try { await history.readMessageGap('chat-test', gapRows[0], () => true); } catch (error) { stalledGapError = error; }
+  check('non-advancing backend pages produce an explicit compatibility error', () => assert.match(stalledGapError.message, /未前进/));
+  let failGapReads = 0;
+  requestHandler = async options => {
+    failGapReads++;
+    return failGapReads === 2 ? response({ detail: 'Gap unavailable' }, 503) : gapHandler(options);
+  };
+  let failedGap;
+  try { await history.readMessageGap('chat-test', gapRows[0], () => true); } catch (error) { failedGap = error; }
+  check('a failed middle page does not return a partial successful catch-up', () => assert.ok(failedGap));
+  requestHandler = gapHandler;
+  const recoveredGap = await history.readMessageGap('chat-test', gapRows[0], () => true);
+  check('retry from the unchanged watermark recovers the entire gap', () => assert.equal(recoveredGap.messages.length, 351));
+  let gapCurrent = true, cancelledGapReads = 0;
+  requestHandler = async options => {
+    cancelledGapReads++;
+    const result = await gapHandler(options);
+    if (cancelledGapReads === 2) gapCurrent = false;
+    return result;
+  };
+  let cancelledGap;
+  try { await history.readMessageGap('chat-test', gapRows[0], () => gapCurrent); } catch (error) { cancelledGap = error; }
+  check('cancellation stops paging without returning stale messages', () => {
+    assert.equal(cancelledGapReads, 2); assert.match(cancelledGap.message, /状态已变化/);
+  });
+
+  clearTestOutboxes();
+  session.setSession('write-ahead-login', readyUser, 'refresh');
+  routerParams = { id: 'chat-test' };
+  const writeAheadWait = deferred();
+  const writeAheadBodies = [];
+  requestHandler = async options => {
+    if (options.method === 'POST' && options.url.endsWith('/messages')) {
+      writeAheadBodies.push(options.data);
+      check('pending payload exists in storage before the network handler runs', () => assert.deepEqual(
+        coldOutbox.readChatOutbox(owner, 'chat-test', session.getSessionGeneration())[0].body, options.data));
+      return writeAheadBodies.length === 1 ? writeAheadWait.promise
+        : response({ ...chatMessage('write-ahead-confirmed', options.data.content), client_message_id: options.data.client_message_id });
+    }
+    return response(options.method === 'GET' ? [] : {});
+  };
+  const writeAheadRenderer = createRenderer(ThreadPage);
+  writeAheadRenderer.render(); await flushCallbacks();
+  let writeAheadTree = writeAheadRenderer.render();
+  nodes(writeAheadTree).find(node => node.type === 'Input').props.onInput({ detail: { value: 'survive navigation' } });
+  writeAheadTree = writeAheadRenderer.render();
+  action(writeAheadTree, '发送').props.onClick(); await flushCallbacks();
+  writeAheadRenderer.unmount();
+  const restoredRenderer = createRenderer(ThreadPage);
+  restoredRenderer.render(); await flushCallbacks();
+  let restoredTree = restoredRenderer.render();
+  check('reopened chat recovers an in-flight payload without auto-sending', () => {
+    assert.ok(hasText(restoredTree, 'survive navigation')); assert.ok(action(restoredTree, '重新发送')); assert.equal(writeAheadBodies.length, 1);
+  });
+  writeAheadWait.resolve(response({ ...chatMessage('late-write-ahead', 'survive navigation'), client_message_id: writeAheadBodies[0].client_message_id }));
+  await flushCallbacks();
+  check('a departed page cannot delete the new page pending record', () => assert.equal(
+    coldOutbox.readChatOutbox(owner, 'chat-test', session.getSessionGeneration()).length, 1));
+  nodes(restoredTree).find(node => node.type === 'Input').props.onInput({ detail: { value: 'new draft after reopen' } });
+  restoredTree = restoredRenderer.render();
+  action(restoredTree, '重新发送').props.onClick(); await flushCallbacks();
+  restoredTree = restoredRenderer.render();
+  check('reopened manual retry uses the exact pre-navigation payload', () => assert.deepEqual(writeAheadBodies[0], writeAheadBodies[1]));
+  check('reopened retry does not erase a newer draft and removes confirmed storage', () => {
+    assert.equal(nodes(restoredTree).find(node => node.type === 'Input').props.value, 'new draft after reopen');
+    assert.equal(coldOutbox.readChatOutbox(owner, 'chat-test', session.getSessionGeneration()).length, 0);
+  });
+  restoredRenderer.unmount();
+
+  const originalStorageWrite = taro.setStorageSync;
+  let blockedNetworkSends = 0;
+  taro.setStorageSync = (key, value) => { if (key.startsWith('aiye.chatOutbox.v1.')) throw new Error('Storage full'); return originalStorageWrite(key, value); };
+  requestHandler = async options => {
+    if (options.method === 'POST' && options.url.endsWith('/messages')) blockedNetworkSends++;
+    return response(options.method === 'GET' ? [] : {});
+  };
+  const storageFailureRenderer = createRenderer(ThreadPage);
+  storageFailureRenderer.render(); await flushCallbacks();
+  let storageFailureTree = storageFailureRenderer.render();
+  nodes(storageFailureTree).find(node => node.type === 'Input').props.onInput({ detail: { value: 'keep when storage fails' } });
+  storageFailureTree = storageFailureRenderer.render();
+  action(storageFailureTree, '发送').props.onClick(); await flushCallbacks();
+  storageFailureTree = storageFailureRenderer.render();
+  check('storage failure blocks network submission and preserves the draft', () => {
+    assert.equal(blockedNetworkSends, 0);
+    assert.equal(nodes(storageFailureTree).find(node => node.type === 'Input').props.value, 'keep when storage fails');
+    assert.ok(hasText(storageFailureTree, 'Storage full，点击重试待发送记录'));
+  });
+  taro.setStorageSync = originalStorageWrite;
+  nodes(storageFailureTree).find(node => node.props.children.includes('Storage full，点击重试待发送记录')).props.onClick();
+  storageFailureTree = storageFailureRenderer.render();
+  check('storage retry does not discard an unsaved in-memory message payload', () => assert.ok(action(storageFailureTree, '重新发送')));
+  storageFailureRenderer.unmount();
+  clearTestOutboxes();
   check('new retry and context tests clean up timers and keyboard subscriptions', () => {
     assert.equal(chatIntervals.size, 0); assert.equal(keyboardListeners.size, 0);
   });
