@@ -6,7 +6,7 @@ import { API_BASE, getConversations, getItem, getMessages, markRead, mediaUrl, r
 import { getSessionGeneration, requireLogin, useSession } from '@/store/session';
 import { useResource } from '@/hooks/useResource';
 import { readMessageGap } from '@/services/chatHistory';
-import { confirmChatMessages, queueChatMessage, readChatOutbox } from '@/store/chatOutbox';
+import { ChatOutboxFormatError, confirmChatMessages, inspectChatOutboxRepair, queueChatMessage, readChatOutbox, repairChatOutbox } from '@/store/chatOutbox';
 import { onboardingDestination } from '@/utils/authentication';
 import { ActionButton, Avatar, StateView } from '@/components/UI';
 import { displayLocation, formatTime, itemUrl, uniqueId } from '@/utils/catalog';
@@ -36,6 +36,7 @@ export default function ThreadPage() {
   const [busy, setBusy] = useState(false);
   const [failedSends, setFailedSends] = useState<FailedSend[]>([]);
   const [outboxError, setOutboxError] = useState('');
+  const [outboxDamaged, setOutboxDamaged] = useState(false);
   const [hasMore, setHasMore] = useState(false);
   const [visible, setVisible] = useState(false);
   const [scrollTarget, setScrollTarget] = useState('');
@@ -98,10 +99,11 @@ export default function ThreadPage() {
       setFailedSends(current => [...new Map([...restored, ...current]
         .filter(entry => !confirmedSends.current.has(entry.body.client_message_id || ''))
         .map(entry => [entry.body.client_message_id, entry])).values()]);
-      setOutboxError('');
+      setOutboxError(''); setOutboxDamaged(false);
     } catch (error) {
       console.error('[Chat] Outbox restore failed', error);
       setOutboxError(error instanceof Error ? error.message : '待发送记录读取失败');
+      setOutboxDamaged(error instanceof ChatOutboxFormatError);
     }
   };
   const merge = (next: ChatMessage[], scroll = true) => {
@@ -114,6 +116,7 @@ export default function ThreadPage() {
       catch (error) {
         console.error('[Chat] Outbox confirmation failed', error);
         setOutboxError(error instanceof Error ? error.message : '待发送记录更新失败');
+        setOutboxDamaged(error instanceof ChatOutboxFormatError);
       }
     }
     setFailedSends(current => current.filter(failed => !confirmedSends.current.has(failed.body.client_message_id || '')));
@@ -134,7 +137,7 @@ export default function ThreadPage() {
     refreshTask.current = task;
     const isCurrent = () => activeView() && currentGeneration === generation.current && refreshTask.current === task;
     try {
-      const result = await readMessageGap(id, refreshAnchor.current, isCurrent);
+      const result = await readMessageGap(id, refreshAnchor.current, isCurrent, initialized.current && !refreshAnchor.current);
       if (!isCurrent()) return;
       merge(result.messages);
       if (result.latest) refreshAnchor.current = result.latest;
@@ -154,7 +157,7 @@ export default function ThreadPage() {
     initialized.current = false; nearBottom.current = true;
     refreshAnchor.current = undefined;
     operation.current = null; refreshTask.current = null; textRevision.current++;
-    pendingText.current = null; confirmedSends.current.clear(); setFailedSends([]); setOutboxError('');
+    pendingText.current = null; confirmedSends.current.clear(); setFailedSends([]); setOutboxError(''); setOutboxDamaged(false);
     setMessages([]); setText(''); setBusy(false); setError('');
     setScrollTarget(''); setKeyboardHeight(0); setDataKey(viewKey); setLoading(true); setHasMore(false);
     if (token && user && onboardingRoute) requireLogin();
@@ -215,7 +218,10 @@ export default function ThreadPage() {
       if (!currentOperation(task)) return false;
       // A live/REST confirmation may arrive even when the POST response is lost.
       if (confirmedSends.current.has(payload.client_message_id)) return true;
-      if (!persisted) setOutboxError(err instanceof Error ? err.message : '待发送记录保存失败，未提交消息');
+      if (!persisted) {
+        setOutboxError(err instanceof Error ? err.message : '待发送记录保存失败，未提交消息');
+        setOutboxDamaged(err instanceof ChatOutboxFormatError);
+      }
       setFailedSends(current => [...current.filter(failed => failed.body.client_message_id !== payload.client_message_id),
         { body: payload, revision }]);
       showError(err);
@@ -241,6 +247,39 @@ export default function ThreadPage() {
     try {
       if (await send(failed.body, task, failed.revision) && currentOperation(task)
         && failed.revision !== undefined && textRevision.current === failed.revision) setText('');
+    } finally { finishOperation(task); }
+  };
+  const removePendingRecord = async (failed: FailedSend) => {
+    const task = beginOperation();
+    if (!task) return;
+    try {
+      const result = await Taro.showModal({ title: '移除待发送记录',
+        content: '仅移除本机重试记录，不会撤回可能已送达的消息。', confirmText: '移除' });
+      if (!result.confirm || !currentOperation(task) || !user) return;
+      const messageId = failed.body.client_message_id || '';
+      confirmChatMessages(user.id, id, loginGeneration, new Set([messageId]));
+      if (pendingText.current?.body.client_message_id === messageId) pendingText.current = null;
+      setFailedSends(current => current.filter(entry => entry.body.client_message_id !== messageId));
+    } catch (error) { if (currentOperation(task)) showError(error); }
+    finally { finishOperation(task); }
+  };
+  const repairPendingRecords = async () => {
+    if (!user) return;
+    const task = beginOperation();
+    if (!task) return;
+    try {
+      const preview = inspectChatOutboxRepair(user.id, id, loginGeneration);
+      const result = await Taro.showModal({
+        title: '备份后修复待发送记录',
+        content: `可恢复${preview.entries.length}条，${preview.skipped}条损坏或ID冲突，无法自动恢复。先在本机保留原始备份，再修复当前记录；不会自动发送或撤回消息。备份不跨设备。`,
+        confirmText: '确认修复',
+      });
+      if (!result.confirm || !currentOperation(task)) return;
+      repairChatOutbox(user.id, id, loginGeneration, preview);
+      restoreOutbox();
+    } catch (error) {
+      console.error('[Chat] Outbox repair failed', error);
+      if (currentOperation(task)) showError(error);
     } finally { finishOperation(task); }
   };
   const sendImage = async () => {
@@ -369,6 +408,10 @@ export default function ThreadPage() {
         nearBottom.current = scrollHeight - scrollTop < viewport * 0.85;
       }} onScrollToLower={() => { nearBottom.current = true; }} lowerThreshold={100}>
       <View className={styles.list}><StateView loading={loading} />
+        {outboxError && outboxDamaged && <View className={styles.repairNotice}>
+          <Text className={styles.cardMeta}>损坏记录不会被自动覆盖。先检查可恢复数量，确认后备份原记录并修复。</Text>
+          <ActionButton small disabled={busy} onClick={() => void repairPendingRecords()}>检查并修复记录</ActionButton>
+        </View>}
         {!serviceId && (meta.date || meta.summary || meta.id) && <View className={styles.consultationMeta}>
           {meta.date && <Text className={styles.metaDate}>{meta.date}</Text>}
           {meta.summary && <Text className={styles.metaSummary}>{meta.summary}</Text>}
@@ -403,7 +446,10 @@ export default function ThreadPage() {
           <Text className={styles.cardMeta}>消息未确认发送</Text>
           <Text className={styles.failedPreview}>{failed.body.type === 'image' ? '图片'
             : failed.body.type === 'location' ? '位置' : failed.body.content || '内容卡片'}</Text>
-          <ActionButton small disabled={busy} onClick={() => void retrySend(failed)}>重新发送</ActionButton>
+          <View className={styles.failedActions}>
+            <ActionButton small disabled={busy} onClick={() => void retrySend(failed)}>重新发送</ActionButton>
+            <ActionButton small disabled={busy} onClick={() => void removePendingRecord(failed)}>移除记录</ActionButton>
+          </View>
         </View>)}
       </View>
     </ScrollView>

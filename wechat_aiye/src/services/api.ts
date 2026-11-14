@@ -137,14 +137,14 @@ export const getAllDiscovery = async (kind: ItemKind): Promise<(Service | Experi
   }
   return Array.from(new Map(items.map(item => [item.id, item])).values());
 };
-export const getOwnItems = async (kind: ItemKind) => {
+export const getOwnItems = async (kind: ItemKind, includeCancelled = false) => {
   const items: (Service | Experience)[] = [];
   for (let skip = 0; skip < 10000; skip += 100) {
     const page = await request<(Service | Experience)[]>(`${resourcePath(kind)}/?skip=${skip}&limit=100`);
     items.push(...page);
     if (page.length < 100) break;
   }
-  return items.filter(item => !item.is_deleted);
+  return includeCancelled ? items : items.filter(item => !item.is_deleted);
 };
 export const saveItem = async (kind: ItemKind, item: Partial<Service & Experience>, editing: boolean) => {
   const detailPath = `${resourcePath(kind)}/${encodeURIComponent(item.id || '')}`;

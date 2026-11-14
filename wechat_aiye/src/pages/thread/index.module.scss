@@ -17,6 +17,8 @@
 .metaLink { display: block; padding: 24rpx 16rpx; font-size: 28rpx; color: #3B3B3B; text-decoration: underline; @include interactive; }
 .failedSend { margin: 24rpx 0; padding: 24rpx; border: 2rpx solid $color-border; border-radius: 24rpx; }
 .failedPreview { display: block; margin: 8rpx 0 16rpx; font-size: 28rpx; @include text-ellipsis-multi(2); }
+.failedActions { display: flex; flex-wrap: wrap; gap: 16rpx; }
+.repairNotice { display: flex; flex-direction: column; gap: 16rpx; margin-bottom: 24rpx; padding: 24rpx; border: 2rpx solid $color-border; border-radius: 24rpx; }
 .history { flex: 1; min-height: 0; height: 0; }
 .list { padding: 24rpx 32rpx; }
 .row { display: flex; align-items: flex-start; gap: 20rpx; margin: 36rpx 0; }

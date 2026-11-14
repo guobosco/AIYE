@@ -111,6 +111,7 @@ class LuluRepository(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val refreshMutex = Mutex()
     private val chatRefreshAnchors = java.util.concurrent.ConcurrentHashMap<Pair<String, String>, ChatMessage>()
+    private val emptyChatRefreshes = java.util.concurrent.ConcurrentHashMap.newKeySet<Pair<String, String>>()
     /**
      * 发现流「读ahead」游标：与首屏 `skip=0` 拉取衔接，用于滚动到底时预取下一页写入 Room。
      * 大厂信息流常见策略：首屏快显 + 提前拉下一屏，减少用户滑到底时的等待（仍受 [refreshMutex] 与网络约束）。
@@ -1190,14 +1191,15 @@ class LuluRepository(
                     chatRefreshAnchors[cacheKey]
                         ?: chatMessageDao.getOldestServerMessageByConversation(conversationId, userId)
                 } else null
+                val fromKnownEmpty = before == null && anchor == null && cacheKey in emptyChatRefreshes
                 var page = apiService?.getChatMessages(
                     conversationId, before = before, beforeId = beforeId.takeIf { before != null }
                 ) ?: emptyList()
                 val latest = page.lastOrNull()
                 val items = page.toMutableList()
-                while (anchor != null && page.size == 100 &&
-                    (page.first().createdAt > anchor.createdAt ||
-                        (page.first().createdAt == anchor.createdAt && page.first().id > anchor.id))) {
+                while (page.size == 100 && (fromKnownEmpty ||
+                    (anchor != null && (page.first().createdAt > anchor.createdAt ||
+                        (page.first().createdAt == anchor.createdAt && page.first().id > anchor.id))))) {
                     if (currentUserId != userId) return@withContext
                     val cursor = page.first()
                     page = apiService?.getChatMessages(
@@ -1212,7 +1214,12 @@ class LuluRepository(
                 if (currentUserId != userId) return@withContext
                 // Preserve older cached rows; a latest-page refresh is not a full snapshot.
                 chatMessageDao.insertMessages(items.map { it.copy(currentUserId = userId) })
-                if (before == null && latest != null) chatRefreshAnchors[cacheKey] = latest
+                if (before == null) {
+                    if (latest != null) {
+                        chatRefreshAnchors[cacheKey] = latest
+                        emptyChatRefreshes.remove(cacheKey)
+                    } else if (anchor == null) emptyChatRefreshes.add(cacheKey)
+                }
             } catch (e: Exception) {
                 if (e is kotlinx.coroutines.CancellationException) throw e
                 Log.e(TAG, "fetchAndSyncMessages failed", e)

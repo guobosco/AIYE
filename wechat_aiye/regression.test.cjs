@@ -57,6 +57,7 @@ const taro = {
   navigateBack: async () => { await backHandler(); navigations.push('back'); },
   switchTab: async options => { navigations.push(`tab:${options.url}`); },
   showToast: async options => { toasts.push(options.title); },
+  showModal: async () => ({ confirm: false, cancel: true }),
   usePullDownRefresh() {},
   useDidShow: callback => { rendering.lifecycle.show = callback; },
   useDidHide: callback => { rendering.lifecycle.hide = callback; },
@@ -1455,6 +1456,149 @@ const deferred = () => {
       { type: 'text', content: 'x'.repeat(150001), client_message_id: 'oversized' }), /空间不足/));
   clearTestOutboxes();
 
+  const repairEntry = { body: storedPayload, createdAt: 1 };
+  const repairSource = { ...validOutbox, entries: [
+    repairEntry, { body: { type: 'text', content: 'broken' }, createdAt: 2 },
+    { body: { type: 'text', content: 'one', client_message_id: 'conflict' }, createdAt: 3 },
+    { body: { type: 'text', content: 'two', client_message_id: 'conflict' }, createdAt: 4 },
+    null, { body: { ...storedPayload, client_message_id: 'bad-time' }, createdAt: '1' },
+  ] };
+  storage.set(outboxKey, repairSource);
+  const repairSnapshot = JSON.stringify(repairSource);
+  const repairPreview = coldOutbox.inspectChatOutboxRepair(owner, outboxConversation, outboxGeneration);
+  check('repair preview counts invalid and conflicting rows without choosing a duplicate', () => {
+    assert.equal(repairPreview.skipped, 5);
+    assert.deepEqual(repairPreview.entries, [repairEntry]);
+    assert.equal(JSON.stringify(storage.get(outboxKey)), repairSnapshot);
+    assert.ok(!storage.has(`${outboxKey}.recovery`));
+  });
+  repairPreview.entries[0].body.content = 'tampered preview';
+  const repairWrites = [];
+  const repairOriginalWrite = taro.setStorageSync;
+  taro.setStorageSync = (key, value) => { repairWrites.push(key); return repairOriginalWrite(key, value); };
+  const repairedCounts = coldOutbox.repairChatOutbox(owner, outboxConversation, outboxGeneration, repairPreview);
+  taro.setStorageSync = repairOriginalWrite;
+  check('repair backs up before replacing and derives payloads from storage rather than mutable preview', () => {
+    assert.deepEqual(repairWrites, [`${outboxKey}.recovery`, outboxKey]);
+    assert.deepEqual(repairedCounts, { recovered: 1, skipped: 5 });
+    assert.deepEqual(coldOutbox.readChatOutbox(owner, outboxConversation, outboxGeneration), [repairEntry]);
+    assert.equal(JSON.stringify(storage.get(`${outboxKey}.recovery`).original), repairSnapshot);
+  });
+  storage.set(outboxKey, repairSource);
+  const changedPreview = coldOutbox.inspectChatOutboxRepair(owner, outboxConversation, outboxGeneration);
+  storage.set(outboxKey, { ...repairSource, entries: [...repairSource.entries, { body: storedPayload, createdAt: 8 }] });
+  check('repair refuses a snapshot changed during confirmation', () => assert.throws(
+    () => coldOutbox.repairChatOutbox(owner, outboxConversation, outboxGeneration, changedPreview), /已变化/));
+  const changedRepairSource = JSON.stringify(storage.get(outboxKey));
+  const differentBackupPreview = coldOutbox.inspectChatOutboxRepair(owner, outboxConversation, outboxGeneration);
+  check('repair never overwrites an earlier different recovery backup', () => {
+    assert.throws(() => coldOutbox.repairChatOutbox(owner, outboxConversation, outboxGeneration, differentBackupPreview), /另一份/);
+    assert.equal(JSON.stringify(storage.get(outboxKey)), changedRepairSource);
+    assert.equal(JSON.stringify(storage.get(`${outboxKey}.recovery`).original), repairSnapshot);
+  });
+  clearTestOutboxes();
+  storage.set(outboxKey, repairSource);
+  taro.setStorageSync = (key, value) => { if (key.endsWith('.recovery')) throw new Error('Backup full'); return repairOriginalWrite(key, value); };
+  check('backup failure prevents any repair to the original pending records', () => {
+    assert.throws(() => coldOutbox.repairChatOutbox(owner, outboxConversation, outboxGeneration,
+      coldOutbox.inspectChatOutboxRepair(owner, outboxConversation, outboxGeneration)), /Backup full/);
+    assert.equal(JSON.stringify(storage.get(outboxKey)), repairSnapshot);
+  });
+  taro.setStorageSync = (key, value) => key.endsWith('.recovery') ? undefined : repairOriginalWrite(key, value);
+  check('a storage write that does not retain the backup cannot authorize repair', () => {
+    assert.throws(() => coldOutbox.repairChatOutbox(owner, outboxConversation, outboxGeneration,
+      coldOutbox.inspectChatOutboxRepair(owner, outboxConversation, outboxGeneration)), /备份未验证/);
+    assert.equal(JSON.stringify(storage.get(outboxKey)), repairSnapshot);
+  });
+  taro.setStorageSync = (key, value) => {
+    if (key === outboxKey) throw new Error('Repair write failed');
+    return repairOriginalWrite(key, value);
+  };
+  check('a failed replacement retains both original data and its verified recovery backup', () => {
+    assert.throws(() => coldOutbox.repairChatOutbox(owner, outboxConversation, outboxGeneration,
+      coldOutbox.inspectChatOutboxRepair(owner, outboxConversation, outboxGeneration)), /Repair write failed/);
+    assert.equal(JSON.stringify(storage.get(outboxKey)), repairSnapshot);
+    assert.equal(JSON.stringify(storage.get(`${outboxKey}.recovery`).original), repairSnapshot);
+  });
+  taro.setStorageSync = (key, value) => key === outboxKey ? undefined : repairOriginalWrite(key, value);
+  check('a replacement write that does not persist cannot report successful repair', () => {
+    assert.throws(() => coldOutbox.repairChatOutbox(owner, outboxConversation, outboxGeneration,
+      coldOutbox.inspectChatOutboxRepair(owner, outboxConversation, outboxGeneration)), /修复结果未验证/);
+    assert.equal(JSON.stringify(storage.get(outboxKey)), repairSnapshot);
+    assert.equal(JSON.stringify(storage.get(`${outboxKey}.recovery`).original), repairSnapshot);
+  });
+  taro.setStorageSync = repairOriginalWrite;
+  coldOutbox.repairChatOutbox(owner, outboxConversation, outboxGeneration,
+    coldOutbox.inspectChatOutboxRepair(owner, outboxConversation, outboxGeneration));
+  check('retry after replacement failure can reuse the identical verified backup', () => assert.deepEqual(
+    coldOutbox.readChatOutbox(owner, outboxConversation, outboxGeneration), [repairEntry]));
+  clearTestOutboxes();
+  storage.set(outboxKey, repairSource);
+  taro.setStorageSync = (key, value) => {
+    repairOriginalWrite(key, value);
+    if (key.endsWith('.recovery')) storage.set(outboxKey, { ...validOutbox, entries: [repairEntry] });
+  };
+  check('record changes while writing the backup are preserved rather than overwritten by repair', () => {
+    assert.throws(() => coldOutbox.repairChatOutbox(owner, outboxConversation, outboxGeneration,
+      coldOutbox.inspectChatOutboxRepair(owner, outboxConversation, outboxGeneration)), /已变化/);
+    assert.deepEqual(storage.get(outboxKey).entries, [repairEntry]);
+    assert.equal(JSON.stringify(storage.get(`${outboxKey}.recovery`).original), repairSnapshot);
+  });
+  clearTestOutboxes();
+  storage.set(outboxKey, repairSource);
+  taro.setStorageSync = (key, value) => {
+    repairOriginalWrite(key, value);
+    if (key.endsWith('.recovery')) session.setSession('repair-backup-account-switch', otherUser, 'refresh');
+  };
+  check('account changes during backup cannot authorize replacing the previous account original', () => {
+    assert.throws(() => coldOutbox.repairChatOutbox(owner, outboxConversation, outboxGeneration,
+      coldOutbox.inspectChatOutboxRepair(owner, outboxConversation, outboxGeneration)), /登录状态/);
+    assert.equal(JSON.stringify(storage.get(outboxKey)), repairSnapshot);
+  });
+  taro.setStorageSync = repairOriginalWrite;
+  session.setSession('repair-backup-account-return', readyUser, 'refresh');
+  outboxGeneration = session.getSessionGeneration();
+  clearTestOutboxes();
+  for (const envelope of [{ ...repairSource, version: 2 }, { ...repairSource, owner: otherUser.id },
+    { ...repairSource, conversation: 'foreign' }, 'unrecognized']) {
+    storage.set(outboxKey, envelope);
+    check('repair rejects unknown versions, foreign ownership or unrecognized envelopes', () => {
+      assert.throws(() => coldOutbox.inspectChatOutboxRepair(owner, outboxConversation, outboxGeneration), /未修改/);
+      assert.deepEqual(storage.get(outboxKey), envelope);
+    });
+  }
+  storage.set(outboxKey, { ...repairSource, entries: [repairEntry, { body: storedPayload, createdAt: 2 }] });
+  const allConflict = coldOutbox.inspectChatOutboxRepair(owner, outboxConversation, outboxGeneration);
+  check('repair exposes all-conflict rows as unrecoverable without inventing message identities', () => {
+    assert.equal(allConflict.entries.length, 0); assert.equal(allConflict.skipped, 2);
+  });
+  coldOutbox.repairChatOutbox(owner, outboxConversation, outboxGeneration, allConflict);
+  check('explicit repair with no recoverable rows clears only the active queue and keeps the full original backup', () => {
+    assert.ok(!storage.has(outboxKey));
+    assert.equal(storage.get(`${outboxKey}.recovery`).original.entries.length, 2);
+    assert.deepEqual(coldOutbox.readChatOutbox(owner, outboxConversation, outboxGeneration), []);
+  });
+  clearTestOutboxes();
+  storage.set(outboxKey, { ...repairSource, entries: Array.from({ length: 101 }, (_, index) => ({
+    body: { type: 'text', content: 'valid', client_message_id: `repair-capacity-${index}` }, createdAt: index,
+  })) });
+  check('repair does not truncate valid pending rows to fit capacity', () => {
+    assert.throws(() => coldOutbox.inspectChatOutboxRepair(owner, outboxConversation, outboxGeneration), /空间不足/);
+    assert.equal(storage.get(outboxKey).entries.length, 101);
+    assert.ok(!storage.has(`${outboxKey}.recovery`));
+  });
+  storage.set(outboxKey, repairSource);
+  const oldRepairPreview = coldOutbox.inspectChatOutboxRepair(owner, outboxConversation, outboxGeneration);
+  session.setSession('repair-other-account', otherUser, 'refresh');
+  check('repair and inspection reject callbacks belonging to a previous account', () => {
+    assert.throws(() => coldOutbox.inspectChatOutboxRepair(owner, outboxConversation, outboxGeneration), /登录状态/);
+    assert.throws(() => coldOutbox.repairChatOutbox(owner, outboxConversation, outboxGeneration, oldRepairPreview), /登录状态/);
+    assert.equal(JSON.stringify(storage.get(outboxKey)), repairSnapshot);
+  });
+  session.setSession('repair-return-account', readyUser, 'refresh');
+  outboxGeneration = session.getSessionGeneration();
+  clearTestOutboxes();
+
   const history = load('src/services/chatHistory.ts');
   const gapRows = Array.from({ length: 351 }, (_, index) => ({
     ...chatMessage(`gap-${String(index).padStart(4, '0')}`, `gap content ${index}`), created_at: 1000,
@@ -1480,6 +1624,11 @@ const deferred = () => {
   check('catch-up result is chronologically stable with the original newest watermark', () => {
     assert.deepEqual(filledGap.messages.map(row => row.id), gapRows.map(row => row.id));
     assert.equal(filledGap.latest.id, gapRows.at(-1).id);
+  });
+  gapReads = 0;
+  const knownEmptyGap = await history.readMessageGap('chat-test', undefined, () => true, true);
+  check('a previously confirmed empty conversation catches up all new pages', () => {
+    assert.equal(knownEmptyGap.messages.length, 351); assert.equal(gapReads, 4);
   });
   requestHandler = async options => {
     if (!options.url.includes('/messages?')) return response([]);
@@ -1576,13 +1725,177 @@ const deferred = () => {
   check('storage failure blocks network submission and preserves the draft', () => {
     assert.equal(blockedNetworkSends, 0);
     assert.equal(nodes(storageFailureTree).find(node => node.type === 'Input').props.value, 'keep when storage fails');
-    assert.ok(hasText(storageFailureTree, 'Storage full，点击重试待发送记录'));
+    assert.ok(nodes(storageFailureTree).some(node => node.props.className === 'notice'
+      && node.props.children.join('') === 'Storage full，点击重试待发送记录'));
   });
   taro.setStorageSync = originalStorageWrite;
-  nodes(storageFailureTree).find(node => node.props.children.includes('Storage full，点击重试待发送记录')).props.onClick();
+  nodes(storageFailureTree).find(node => node.props.className === 'notice'
+    && node.props.children.join('') === 'Storage full，点击重试待发送记录').props.onClick();
   storageFailureTree = storageFailureRenderer.render();
   check('storage retry does not discard an unsaved in-memory message payload', () => assert.ok(action(storageFailureTree, '重新发送')));
+  const originalModal = taro.showModal;
+  let removalPrompt;
+  taro.showModal = async options => { removalPrompt = options; return { confirm: false }; };
+  action(storageFailureTree, '移除记录').props.onClick(); await flushCallbacks();
+  storageFailureTree = storageFailureRenderer.render();
+  check('cancelling local record removal preserves its pending action', () => assert.ok(action(storageFailureTree, '重新发送')));
+  taro.showModal = async options => { removalPrompt = options; return { confirm: true }; };
+  action(storageFailureTree, '移除记录').props.onClick(); await flushCallbacks();
+  storageFailureTree = storageFailureRenderer.render();
+  check('local record removal is explicit and never claims to recall a server message', () => {
+    assert.ok(removalPrompt.content.includes('不会撤回'));
+    assert.ok(!hasText(storageFailureTree, '消息未确认发送')); assert.equal(blockedNetworkSends, 0);
+  });
+  taro.showModal = originalModal;
   storageFailureRenderer.unmount();
+  clearTestOutboxes();
+  const repairPageKey = `aiye.chatOutbox.v1.${encodeURIComponent(owner)}.chat-test`;
+  const repairPageSource = { ...repairSource, conversation: 'chat-test' };
+  storage.set(repairPageKey, repairPageSource);
+  let repairPagePosts = 0, repairPrompts = 0, repairPagePrompt;
+  requestHandler = async options => {
+    if (options.method === 'POST' && options.url.endsWith('/messages')) repairPagePosts++;
+    return response(options.method === 'GET' ? [] : {});
+  };
+  const repairPageRenderer = createRenderer(ThreadPage);
+  repairPageRenderer.render(); await flushCallbacks();
+  let repairPageTree = repairPageRenderer.render();
+  check('corrupt chat storage offers an explicit repair entry without sending any messages', () => {
+    assert.ok(action(repairPageTree, '检查并修复记录'));
+    assert.ok(!action(repairPageTree, '重新发送')); assert.equal(repairPagePosts, 0);
+  });
+  const cancelRepairModal = deferred();
+  taro.showModal = options => { repairPrompts++; repairPagePrompt = options; return cancelRepairModal.promise; };
+  action(repairPageTree, '检查并修复记录').props.onClick();
+  action(repairPageTree, '检查并修复记录').props.onClick();
+  await flushCallbacks();
+  check('repair confirmation is single-flight and states counts, backup and non-delivery semantics', () => {
+    assert.equal(repairPrompts, 1);
+    assert.ok(repairPagePrompt.content.includes('可恢复1条，5条'));
+    assert.ok(repairPagePrompt.content.includes('不会自动发送或撤回'));
+    assert.ok(repairPagePrompt.content.includes('备份不跨设备'));
+    assert.ok(repairPagePrompt.confirmText.length <= 4);
+  });
+  cancelRepairModal.resolve({ confirm: false });
+  await flushCallbacks();
+  repairPageTree = repairPageRenderer.render();
+  check('cancelling repair leaves corrupt storage and its repair action unchanged', () => {
+    assert.deepEqual(storage.get(repairPageKey), repairPageSource);
+    assert.ok(!storage.has(`${repairPageKey}.recovery`));
+    assert.ok(action(repairPageTree, '检查并修复记录'));
+  });
+  taro.showModal = async () => ({ confirm: true });
+  taro.setStorageSync = (key, value) => { if (key.endsWith('.recovery')) throw new Error('Backup failed'); return originalStorageWrite(key, value); };
+  action(repairPageTree, '检查并修复记录').props.onClick(); await flushCallbacks();
+  repairPageTree = repairPageRenderer.render();
+  check('repair backup failure remains visible and preserves the damaged source', () => {
+    assert.equal(toasts.at(-1), 'Backup failed');
+    assert.deepEqual(storage.get(repairPageKey), repairPageSource);
+    assert.ok(action(repairPageTree, '检查并修复记录'));
+  });
+  taro.setStorageSync = originalStorageWrite;
+  nodes(repairPageTree).find(node => node.type === 'Input').props.onInput({ detail: { value: 'draft during repair' } });
+  repairPageTree = repairPageRenderer.render();
+  action(repairPageTree, '检查并修复记录').props.onClick(); await flushCallbacks();
+  repairPageTree = repairPageRenderer.render();
+  check('confirmed repair restores valid messages as manual retries without clearing the draft', () => {
+    assert.ok(!action(repairPageTree, '检查并修复记录'));
+    assert.ok(action(repairPageTree, '重新发送'));
+    assert.equal(nodes(repairPageTree).find(node => node.type === 'Input').props.value, 'draft during repair');
+    assert.equal(repairPagePosts, 0);
+    assert.deepEqual(storage.get(`${repairPageKey}.recovery`).original, repairPageSource);
+  });
+  repairPageRenderer.unmount();
+  clearTestOutboxes();
+  storage.set(repairPageKey, repairPageSource);
+  const staleRepairRenderer = createRenderer(ThreadPage);
+  staleRepairRenderer.render(); await flushCallbacks();
+  let staleRepairTree = staleRepairRenderer.render();
+  const staleRepairModal = deferred();
+  taro.showModal = () => staleRepairModal.promise;
+  action(staleRepairTree, '检查并修复记录').props.onClick(); await flushCallbacks();
+  session.setSession('repair-page-account-switch', otherUser, 'refresh');
+  staleRepairTree = staleRepairRenderer.render(); await flushCallbacks();
+  staleRepairModal.resolve({ confirm: true }); await flushCallbacks();
+  check('confirming an old repair modal after account switching cannot modify original records', () => {
+    assert.deepEqual(storage.get(repairPageKey), repairPageSource);
+    assert.ok(!storage.has(`${repairPageKey}.recovery`));
+    assert.equal(repairPagePosts, 0);
+  });
+  staleRepairRenderer.unmount();
+  taro.showModal = originalModal;
+  clearTestOutboxes();
+  routerParams = { id: 'chat-test' };
+  session.setSession('render-gap-login', readyUser, 'refresh');
+  let visibleServerRows = [gapRows[0]], visibleGapReads = 0;
+  requestHandler = async options => {
+    if (!options.url.includes('/messages?')) return response(options.method === 'GET' ? [] : {});
+    visibleGapReads++;
+    const cursor = new URL(options.url).searchParams.get('before_id');
+    return response(visibleServerRows.filter(row => !cursor || row.id < cursor).slice(-100));
+  };
+  const gapRenderer = createRenderer(ThreadPage);
+  gapRenderer.render(); gapRenderer.show(); gapRenderer.render();
+  await flushCallbacks();
+  let gapTree = gapRenderer.render();
+  check('a complete initial short history has no earlier-page action', () => assert.ok(
+    !nodes(gapTree).some(node => node.props.children.includes('加载更早消息'))));
+  sockets.at(-1).message({ data: JSON.stringify({ type: 'message', message: gapRows.at(-1) }) });
+  await flushCallbacks();
+  gapTree = gapRenderer.render();
+  check('a live newest message does not fabricate the missing middle history', () => {
+    assert.ok(hasText(gapTree, 'gap content 350')); assert.ok(!hasText(gapTree, 'gap content 175'));
+  });
+  gapRenderer.hide(); gapRenderer.render();
+  visibleServerRows = gapRows;
+  visibleGapReads = 0;
+  gapRenderer.show(); gapRenderer.render();
+  await flushCallbacks();
+  gapTree = gapRenderer.render();
+  check('show after a live jump catches up from the REST watermark, not the newest socket row', () => {
+    assert.equal(visibleGapReads, 4);
+    assert.ok(hasText(gapTree, 'gap content 175'));
+    assert.equal(nodes(gapTree).filter(node => node.props.className === 'row mine').length, 351);
+  });
+  check('catch-up preserves the known complete older-history state', () => assert.ok(
+    !nodes(gapTree).some(node => node.props.children.includes('加载更早消息'))));
+  visibleServerRows = [...gapRows, { ...chatMessage('gap-0351', 'one more'), created_at: 1000 }];
+  visibleGapReads = 0;
+  [...chatIntervals.values()][0](); await flushCallbacks();
+  gapTree = gapRenderer.render();
+  check('completed catch-up advances its REST watermark for efficient next refresh', () => {
+    assert.equal(visibleGapReads, 1); assert.ok(hasText(gapTree, 'gap content 175')); assert.ok(hasText(gapTree, 'one more'));
+  });
+  const hiddenGapWait = deferred();
+  requestHandler = async options => options.url.includes('/messages?') ? hiddenGapWait.promise : response([]);
+  [...chatIntervals.values()][0]();
+  gapRenderer.hide(); gapRenderer.render();
+  hiddenGapWait.resolve(response([{ ...chatMessage('hidden-stale', 'do not merge while hidden'), created_at: 2000 }]));
+  await flushCallbacks();
+  check('hiding invalidates a pending REST refresh before it can merge', () => assert.ok(
+    !hasText(gapRenderer.render(), 'do not merge while hidden')));
+  gapRenderer.unmount();
+  visibleServerRows = [];
+  requestHandler = async options => {
+    if (!options.url.includes('/messages?')) return response(options.method === 'GET' ? [] : {});
+    const cursor = new URL(options.url).searchParams.get('before_id');
+    return response(visibleServerRows.filter(row => !cursor || row.id < cursor).slice(-100));
+  };
+  const emptyGapRenderer = createRenderer(ThreadPage);
+  emptyGapRenderer.render(); emptyGapRenderer.show(); emptyGapRenderer.render();
+  await flushCallbacks();
+  emptyGapRenderer.hide(); emptyGapRenderer.render();
+  visibleServerRows = gapRows;
+  emptyGapRenderer.show(); emptyGapRenderer.render();
+  await flushCallbacks();
+  const emptyGapTree = emptyGapRenderer.render();
+  check('an initially empty rendered chat does not lose middle messages after hiding', () => {
+    assert.ok(hasText(emptyGapTree, 'gap content 175'));
+    assert.equal(nodes(emptyGapTree).filter(node => node.props.className === 'row mine').length, 351);
+  });
+  check('empty-to-populated catch-up preserves complete-history state', () => assert.ok(
+    !nodes(emptyGapTree).some(node => node.props.children.includes('加载更早消息'))));
+  emptyGapRenderer.unmount();
   clearTestOutboxes();
   check('new retry and context tests clean up timers and keyboard subscriptions', () => {
     assert.equal(chatIntervals.size, 0); assert.equal(keyboardListeners.size, 0);
