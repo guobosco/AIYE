@@ -4,7 +4,7 @@ import { normalizeServiceCategory, uniqueId } from '@/utils/catalog';
 import type {
   CatalogItem, ChatMessage, ConversationItem, Experience, ItemKind,
   MessageInput, Service, UploadResult, User, WishlistProfile,
-  AuthResponse, TokenResponse,
+  AuthResponse, TokenResponse, CalendarClosure, CalendarResponse,
 } from '@/types/models';
 
 export const API_BASE = (process.env.TARO_APP_API_BASE_URL || '')
@@ -161,6 +161,12 @@ export const saveItem = async (kind: ItemKind, item: Partial<Service & Experienc
 };
 export const deleteItem = (kind: ItemKind, id: string) =>
   request<CatalogItem>(`${resourcePath(kind)}/${encodeURIComponent(id)}`, 'DELETE');
+export const hideItemRecord = (kind: ItemKind, id: string) =>
+  request<{ hidden: boolean }>(`${resourcePath(kind)}/${encodeURIComponent(id)}/record`, 'DELETE');
+export const getCalendar = (id: string) =>
+  request<CalendarResponse>(`/services/${encodeURIComponent(id)}/calendar`);
+export const saveCalendarDay = (id: string, day: string, value: CalendarClosure) =>
+  request<CalendarClosure>(`/services/${encodeURIComponent(id)}/calendar/${encodeURIComponent(day)}`, 'PUT', value);
 export const login = async (phone: string, password: string) => {
   const result = await request<TokenResponse>('/auth/token', 'POST',
     `username=${encodeURIComponent(phone)}&password=${encodeURIComponent(password)}`, true);

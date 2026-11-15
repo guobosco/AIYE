@@ -110,6 +110,19 @@ fun AppNavHost(intentState: Intent? = null) {
         navController = navController,
         startDestination = startDestination
     ) {
+        composable(
+            Screen.MyExperiences.route,
+            arguments = listOf(
+                navArgument("edit") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("category") { type = NavType.StringType; nullable = true; defaultValue = null },
+                navArgument("favorites") { type = NavType.StringType; defaultValue = "0" }
+            )
+        ) { entry ->
+            com.example.aiye.ui.screen.ExperienceManagementScreen(
+                navController, entry.arguments?.getString("edit"),
+                entry.arguments?.getString("category"), entry.arguments?.getString("favorites") == "1"
+            )
+        }
         // 启动页路由
         composable(Screen.Splash.route) {
             SplashScreen(navController = navController, nextRoute = targetDestination)
@@ -438,6 +451,12 @@ fun AppNavHost(intentState: Intent? = null) {
  * 功能：定义应用中所有可用的屏幕路由，便于统一管理和使用
  */
 sealed class Screen(val route: String) {
+    object MyExperiences : Screen("my_experiences?edit={edit}&category={category}&favorites={favorites}") {
+        fun createRoute(edit: String? = null, category: String? = null, favorites: Boolean = false): String =
+            "my_experiences?favorites=${if (favorites) 1 else 0}" +
+                (edit?.let { "&edit=${android.net.Uri.encode(it)}" } ?: "") +
+                (category?.let { "&category=${android.net.Uri.encode(it)}" } ?: "")
+    }
     object Splash : Screen("splash")
     object Home : Screen("home")
     object CreateService : Screen(

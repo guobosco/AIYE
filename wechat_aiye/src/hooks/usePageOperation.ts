@@ -33,5 +33,5 @@ export const usePageOperation = (scope: string) => {
     operation.current = null;
     if (active()) setPending(null);
   };
-  return { begin, isCurrent, finish, cancel, active, busy: pending?.key === key };
+  return { begin, isCurrent, finish, cancel, active, idle: () => active() && !operation.current, busy: pending?.key === key };
 };

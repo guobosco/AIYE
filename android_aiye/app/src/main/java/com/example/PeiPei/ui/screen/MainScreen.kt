@@ -91,6 +91,9 @@ fun MainScreen(
     
     val context = LocalContext.current
     val repository = remember { AppDataStore.getRepository() }
+    val user by AppDataStore.currentUser.collectAsState()
+    val accountReady = user.id.isNotBlank() && user.isPhoneVerified &&
+        listOf(user.name, user.gender, user.region, user.photoUrl).all { it.isNotBlank() }
     val snackbarHostState = remember { SnackbarHostState() }
     val unreadChatCount by (repository?.unreadChatCount?.collectAsState(initial = 0)
         ?: remember { mutableStateOf(0) })
@@ -260,7 +263,21 @@ fun MainScreen(
                     homeTabReselectTrigger = homeTabReselectTrigger
                 )
             }
-            when (selectedItem) {
+            when (if (selectedItem != 0 && !accountReady) -1 else selectedItem) {
+                -1 -> Column(
+                    Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface).zIndex(1f),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(if (user.id.isBlank()) "登录后使用心愿单、消息与个人功能" else "请先完成手机号验证和资料")
+                    OutlinedButton(onClick = {
+                        navController.navigate(when {
+                            user.id.isBlank() -> Screen.Login.createRoute()
+                            !user.isPhoneVerified -> Screen.WeChatBindPhone.route
+                            else -> Screen.CompleteProfile.route
+                        }) { launchSingleTop = true }
+                    }) { Text(if (user.id.isBlank()) "登录 / 注册" else "完善账号") }
+                }
                 0 -> Unit
                 1 -> Box(
                     Modifier

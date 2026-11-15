@@ -521,7 +521,7 @@ def can_view_service(item: models.Service, viewer: Optional[models.User]) -> boo
 
 
 def can_view_experience(item: models.Experience, viewer: Optional[models.User]) -> bool:
-    if item.is_deleted or (item.review_status or "approved") != "approved":
+    if item.is_deleted or item.is_draft or (item.review_status or "approved") != "approved":
         return viewer is not None and viewer.id == item.host_id
     return True
 
@@ -544,8 +544,8 @@ def apply_owner_service_review_state(item: models.Service):
 
 
 def apply_owner_experience_review_state(item: models.Experience):
-    item.review_status = "pending_review"
-    item.review_submitted_at = current_millis()
+    item.review_status = normalize_review_status_for_submit(bool(item.is_draft))
+    item.review_submitted_at = 0 if item.is_draft else current_millis()
     item.reviewed_at = 0
     item.review_note = ""
 
@@ -931,6 +931,7 @@ def serialize_admin_experience(db: Session, item: models.Experience) -> Dict[str
         "host_phone_number": host.phone_number if host else "",
         "average_rating": float(item.average_rating or 0.0),
         "is_deleted": bool(item.is_deleted),
+        "is_draft": bool(item.is_draft),
         "review_status": item.review_status or "approved",
         "review_status_label": review_status_label(item.review_status or "approved"),
         "review_note": item.review_note or "",
@@ -1016,6 +1017,7 @@ def build_review_queue(db: Session, limit: int = 20) -> List[Dict[str, Union[str
     experiences = db.query(models.Experience).filter(
         models.Experience.review_status == "pending_review",
         models.Experience.is_deleted == False,
+        models.Experience.is_draft == False,
     ).order_by(desc(models.Experience.review_submitted_at), desc(models.Experience.updated_at)).limit(limit).all()
     for item in experiences:
         row = serialize_admin_experience(db, item)
@@ -1094,6 +1096,8 @@ def apply_admin_service_update(item: models.Service, payload: AdminServiceUpdate
 
 
 def apply_admin_experience_update(item: models.Experience, payload: AdminExperienceUpdatePayload):
+    if item.is_draft and payload.review_status in {"approved", "rejected", "pending_review"}:
+        raise HTTPException(409, "Draft must be submitted by its owner before review")
     if payload.title is not None:
         item.title = payload.title.strip()
     if payload.category is not None:

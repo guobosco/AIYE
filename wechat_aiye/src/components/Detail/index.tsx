@@ -2,15 +2,15 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Taro, { useDidShow, useShareAppMessage } from '@tarojs/taro';
 import { Button, Image, ScrollView, Swiper, SwiperItem, Text, View } from '@tarojs/components';
 import classnames from 'classnames';
-import { createConversation, getExperienceFavorites, getItem, getWishlist, mediaUrl, request, showError, toggleFavorite } from '@/services/api';
+import { createConversation, getCalendar, getExperienceFavorites, getItem, getWishlist, mediaUrl, request, showError, toggleFavorite } from '@/services/api';
 import { requireLogin, useSession } from '@/store/session';
-import { getClosures, recordView } from '@/store/activity';
+import { recordView } from '@/store/activity';
 import { useResource } from '@/hooks/useResource';
 import { ActionButton, Avatar, StateView, Tags } from '@/components/UI';
 import { DECLARATIONS, homeMeta, hostOf, itemUrl } from '@/utils/catalog';
 import { bookingDays, scheduledMillis } from '@/utils/booking';
 import { decodePriceTiers, priceBasisLabel } from '@/utils/pricing';
-import type { Experience, ItemKind, Service, User } from '@/types/models';
+import type { CalendarResponse, Experience, ItemKind, Service, User } from '@/types/models';
 import styles from './index.module.scss';
 
 export default function Detail({ kind }: { kind: ItemKind }) {
@@ -31,14 +31,16 @@ export default function Detail({ kind }: { kind: ItemKind }) {
     return item;
   }, null as Service | Experience | null, `${kind}.${id}.${session.user?.id || 'guest'}`);
   const item = resource.data;
+  const calendar = useResource(() => kind === 'service' ? getCalendar(id) : Promise.resolve({ days: {} }),
+    null as CalendarResponse | null, `${kind}.${id}.${session.user?.id || 'guest'}.${sheet}`);
   const host = item ? hostOf(item, kind) : { id: '', name: '' };
   const service = item as Service | null;
   const experience = item as Experience | null;
   const images = useMemo(() => [...new Set([item?.cover_image_url, ...(item?.image_urls || [])].filter((value): value is string => !!value))].map(mediaUrl), [item]);
   const tiers = useMemo(() => item ? decodePriceTiers(item.price_text, item.price_basis_text) : [], [item]);
-  const days = useMemo(() => item ? bookingDays(kind === 'service' ? item as Service : {
+  const days = useMemo(() => item && calendar.data ? bookingDays(kind === 'service' ? item as Service : {
     booking_time_ranges_json: '', booking_lead_hours: 0, booking_future_open_days: 30,
-  }, new Date(), host.id === session.user?.id ? getClosures(id) : {}) : [], [item, kind, sheet, host.id, session.user?.id, id]);
+  }, new Date(), calendar.data.days) : [], [item, kind, sheet, calendar.data]);
   const day = days.find(value => value.key === date) || days[0];
   const selectedTime = day?.times.includes(time) ? time : day?.times[0] || '';
   const isOwner = !!host.id && host.id === session.user?.id;
@@ -135,9 +137,10 @@ export default function Detail({ kind }: { kind: ItemKind }) {
           onClick={() => { setDate(value.key); setTime(''); }}>{value.label}</View>)}</ScrollView>
         <View className={styles.times}>{day?.times.map(value => <View key={value} className={classnames(styles.time, selectedTime === value && styles.selected)}
           onClick={() => setTime(value)}>{value}</View>)}</View>
-        {!days.length && <Text className={styles.meta}>当前暂无可选时间，请联系主理人。</Text>}
+        {(calendar.loading || calendar.error) && <StateView loading={calendar.loading} error={calendar.error} onRetry={calendar.refresh} />}
+        {!calendar.loading && !calendar.error && !days.length && <Text className={styles.meta}>当前暂无可选时间，请联系主理人。</Text>}
       </ScrollView>
-      <ActionButton disabled={!day || !selectedTime} onClick={() => {
+      <ActionButton disabled={calendar.loading || !!calendar.error || !day || !selectedTime} onClick={() => {
         if (!day || !selectedTime) return;
         const scheduled = scheduledMillis(day.key, selectedTime);
         setSheet(false);

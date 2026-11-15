@@ -34,7 +34,7 @@ export const bookingDays = (
   return Array.from({ length: count }, (_, offset) => {
     const day = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
     const key = dateKey(day);
-    const closure = closures[key];
+    const closure = closures[key]?.active === false ? undefined : closures[key];
     return {
       key, label: offset === 0 ? '今天' : offset === 1 ? '明天' : `${day.getMonth() + 1}月${day.getDate()}日`,
       times: times.filter(time => {

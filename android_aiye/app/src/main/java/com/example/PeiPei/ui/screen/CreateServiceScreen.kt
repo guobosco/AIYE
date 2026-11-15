@@ -134,6 +134,21 @@ fun CreateServiceScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val view = LocalView.current
     val currentUser by AppDataStore.currentUser.collectAsState()
+    if (currentUser.id.isBlank() || !currentUser.isPhoneVerified ||
+        listOf(currentUser.name, currentUser.gender, currentUser.region, currentUser.photoUrl).any { it.isBlank() }) {
+        Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
+            Text("发布前请先完成账号验证和资料")
+            OutlinedButton(onClick = {
+                navController.navigate(when {
+                    currentUser.id.isBlank() -> Screen.Login.createRoute()
+                    !currentUser.isPhoneVerified -> Screen.WeChatBindPhone.route
+                    else -> Screen.CompleteProfile.route
+                })
+            }) { Text("完善账号") }
+            TextButton(onClick = { navController.popBackStack() }) { Text("返回") }
+        }
+        return
+    }
 
     // Theme adaptation (follow system)
     val isDarkTheme = isSystemInDarkTheme()
@@ -1253,6 +1268,12 @@ fun CreateServiceScreen(
                 serviceCategory = ServiceCategories.OTHER
                 errorMessage = null
                 showCategoryGate = false
+            },
+            onPickExperience = { category ->
+                showCategoryGate = false
+                navController.navigate(Screen.MyExperiences.createRoute(edit = "new", category = category)) {
+                    popUpTo(Screen.CreateService.route) { inclusive = true }
+                }
             }
         )
     }

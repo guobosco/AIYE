@@ -82,7 +82,8 @@ import com.example.aiye.ui.theme.DialogTitleTopPadding
 fun ServiceCategoryPickerGateDialog(
     onDismissRequest: () -> Unit,
     onPickCategory: (category: String) -> Unit,
-    onSkipGeneric: () -> Unit
+    onSkipGeneric: () -> Unit,
+    onPickExperience: (String) -> Unit
 ) {
     var selectedPublishTab by remember { mutableIntStateOf(0) }
     val categoryList = ServiceCategories.HOME_SERVICE_CATEGORIES_EXCLUDING_ALL
@@ -206,7 +207,7 @@ fun ServiceCategoryPickerGateDialog(
                                     CategoryPickerCard(
                                         title = seed.title,
                                         icon = experienceCategoryIcon(seed.title),
-                                        onPublish = { onPickCategory(seed.title) }
+                                        onPublish = { onPickExperience(seed.title) }
                                     )
                                 }
                             }
@@ -214,7 +215,9 @@ fun ServiceCategoryPickerGateDialog(
                     }
 
                     OutlinedButton(
-                        onClick = onSkipGeneric,
+                        onClick = {
+                            if (selectedPublishTab == 1) onPickExperience("其他体验") else onSkipGeneric()
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp),

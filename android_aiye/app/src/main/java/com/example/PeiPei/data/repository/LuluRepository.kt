@@ -919,42 +919,47 @@ class LuluRepository(
         }
     }
 
-    suspend fun updateService(service: Service): Service? = withContext(Dispatchers.IO) {
-        val local = service.copy(creatorId = currentUserId, isSynced = false).withNormalizedCategory()
-        serviceDao.updateService(local)
-        runCatching {
-            val updated = apiService?.updateService(service.id, local.copy(isSynced = true))
-            if (updated != null) {
-                serviceDao.updateService(updated.copy(isSynced = true).withNormalizedCategory())
-                updated.withNormalizedCategory()
-            } else {
-                local
-            }
-        }.getOrElse {
-            Log.e(TAG, "updateService failed", it)
-            local
+    suspend fun updateService(service: Service): Service? {
+        return try { updateServiceConfirmed(service) }
+        catch (error: Exception) {
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            Log.e(TAG, "updateService failed", error)
+            null
         }
+    }
+
+    suspend fun updateServiceConfirmed(service: Service): Service = withContext(Dispatchers.IO) {
+        val owner = currentUserId
+        check(owner.isNotBlank() && service.creatorId == owner) { "请使用发布者账号操作" }
+        val updated = requireNotNull(apiService).updateService(
+            service.id, service.copy(isSynced = true).withNormalizedCategory()
+        ).copy(isSynced = true).withNormalizedCategory()
+        check(currentUserId == owner) { "账号已切换" }
+        serviceDao.insertService(updated)
+        updated
     }
 
     suspend fun deleteService(serviceId: String) {
         withContext(Dispatchers.IO) {
-            val existing = serviceDao.getServiceByIdSync(serviceId) ?: return@withContext
-            serviceDao.updateService(existing.copy(isDeleted = true, updatedAt = System.currentTimeMillis()))
-            try {
-                apiService?.deleteService(serviceId)
-            } catch (e: Exception) {
-                Log.e(TAG, "deleteService failed", e)
-            }
+            val owner = currentUserId
+            val existing = requireNotNull(serviceDao.getServiceByIdSync(serviceId))
+            check(owner.isNotBlank() && existing.creatorId == owner) { "请使用发布者账号操作" }
+            val saved = requireNotNull(apiService).deleteService(serviceId)
+            check(currentUserId == owner) { "账号已切换" }
+            serviceDao.insertService(saved.copy(isSynced = true).withNormalizedCategory())
         }
     }
 
-    /** 从「我发布的」中永久移除本地记录（草稿 / 已取消）；不调用后端硬删接口。 */
+    /** 服务端隐藏管理记录，保留内容供历史聊天引用。 */
     suspend fun purgeMyCreatedServiceRecord(serviceId: String) {
         withContext(Dispatchers.IO) {
             val uid = currentUserId
             if (uid.isBlank()) return@withContext
             val existing = serviceDao.getServiceByIdSync(serviceId) ?: return@withContext
             if (existing.creatorId != uid) return@withContext
+            val result = requireNotNull(apiService).hideServiceRecord(serviceId)
+            check(result["hidden"] == true) { "隐藏结果未确认" }
+            if (currentUserId != uid) return@withContext
             serviceDao.deleteServiceById(serviceId)
         }
     }
@@ -964,10 +969,18 @@ class LuluRepository(
         if (userId.isBlank()) return
         withContext(Dispatchers.IO) {
             try {
-                val remote = apiService?.getMyServices() ?: emptyList()
+                val api = requireNotNull(apiService)
+                val remote = mutableListOf<Service>()
+                while (true) {
+                    val page = api.getMyServices(skip = remote.size, limit = 100)
+                    remote.addAll(page)
+                    if (page.size < 100) break
+                }
+                if (currentUserId != userId) return@withContext
                 val local = serviceDao.getServices(userId).associateBy { it.id }
                 remote.forEach { serviceDao.insertService(it.copy(isSynced = true).withNormalizedCategory()) }
-                local.keys.filter { id -> remote.none { it.id == id } }.forEach { serviceDao.deleteServiceById(it) }
+                local.values.filter { item -> item.isSynced && remote.none { it.id == item.id } }
+                    .forEach { serviceDao.deleteServiceById(it.id) }
             } catch (e: Exception) {
                 Log.e(TAG, "fetchAndSyncServices failed", e)
             }
@@ -1213,7 +1226,7 @@ class LuluRepository(
                 }
                 if (currentUserId != userId) return@withContext
                 // Preserve older cached rows; a latest-page refresh is not a full snapshot.
-                chatMessageDao.insertMessages(items.map { it.copy(currentUserId = userId) })
+                chatMessageDao.insertConfirmedMessages(items.map { it.copy(currentUserId = userId) })
                 if (before == null) {
                     if (latest != null) {
                         chatRefreshAnchors[cacheKey] = latest
@@ -1238,6 +1251,14 @@ class LuluRepository(
         extra: Map<String, String> = emptyMap(),
         clientMessageId: String = UUID.randomUUID().toString()
     ): ChatMessage? = withContext(Dispatchers.IO) {
+        val userId = currentUserId
+        if (userId.isBlank()) return@withContext null
+        val pending = buildLocalFallbackMessage(
+            conversationId, content, type, attachmentUrl, attachmentName,
+            attachmentSize, objectKey, extra
+        ).copy(id = "local-$clientMessageId", clientMessageId = clientMessageId,
+            senderId = userId, currentUserId = userId, status = "sending")
+        chatMessageDao.insertPendingIfUnconfirmed(pending)
         try {
             val request = ChatMessageCreateRequest(
                 type = type,
@@ -1252,34 +1273,26 @@ class LuluRepository(
             val message = apiService?.sendChatMessage(
                 conversationId = conversationId,
                 body = request
-            ) ?: buildLocalFallbackMessage(
-                conversationId = conversationId,
-                content = content,
-                type = type,
-                attachmentUrl = attachmentUrl,
-                attachmentName = attachmentName,
-                attachmentSize = attachmentSize,
-                objectKey = objectKey,
-                extra = extra
-            ).copy(clientMessageId = clientMessageId)
-            chatMessageDao.insertMessage(message.copy(currentUserId = currentUserId))
+            ) ?: error("Chat API unavailable")
+            if (currentUserId != userId) return@withContext null
+            chatMessageDao.insertConfirmed(message.copy(currentUserId = userId))
             fetchAndSyncConversations()
             message
         } catch (e: Exception) {
             Log.e(TAG, "sendChatMessage failed", e)
-            val fallback = buildLocalFallbackMessage(
-                conversationId = conversationId,
-                content = content,
-                type = type,
-                attachmentUrl = attachmentUrl,
-                attachmentName = attachmentName,
-                attachmentSize = attachmentSize,
-                objectKey = objectKey,
-                extra = extra
-            ).copy(clientMessageId = clientMessageId)
-            chatMessageDao.insertMessage(fallback.copy(currentUserId = currentUserId))
-            fallback
+            if (currentUserId == userId) chatMessageDao.insertPendingIfUnconfirmed(pending.copy(status = "failed"))
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            null
         }
+    }
+
+    suspend fun retryChatMessage(message: ChatMessage): ChatMessage? {
+        if (message.currentUserId != currentUserId || message.senderId != currentUserId) return null
+        return sendChatMessage(
+            message.conversationId, message.content, message.type, message.attachmentUrl,
+            message.attachmentName, message.attachmentSize, message.objectKey, message.extra,
+            message.clientMessageId ?: return null
+        )
     }
 
     private fun buildLocalFallbackMessage(
@@ -1305,7 +1318,7 @@ class LuluRepository(
             objectKey = objectKey,
             extra = extra,
             clientMessageId = "local-$now",
-            status = "sent",
+            status = "failed",
             createdAt = now,
             updatedAt = now,
             isDeleted = false,
@@ -1451,7 +1464,7 @@ class LuluRepository(
         when (event.type) {
             "chat_message" -> {
                 val message = event.message ?: return
-                chatMessageDao.insertMessage(message.copy(currentUserId = currentUserId))
+                chatMessageDao.insertConfirmed(message.copy(currentUserId = currentUserId))
                 fetchAndSyncConversations()
                 _newChatMessageFlow.emit(message)
             }

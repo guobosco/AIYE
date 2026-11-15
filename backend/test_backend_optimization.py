@@ -48,8 +48,16 @@ class BackendOptimizationTests(unittest.TestCase):
                 routes.extend((route.path, method.lower()) for method in route.methods)
             elif isinstance(route, APIWebSocketRoute):
                 routes.append((route.path, "websocket"))
-        self.assertEqual(len(routes), 69)
-        digest = hashlib.sha256(json.dumps(sorted(routes)).encode()).hexdigest()
+        parity_routes = {
+            ("/services/{service_id}/record", "delete"),
+            ("/experiences/{experience_id}/record", "delete"),
+            ("/services/{service_id}/calendar", "get"),
+            ("/services/{service_id}/calendar/{day}", "put"),
+        }
+        self.assertTrue(parity_routes.issubset(set(routes)))
+        legacy_routes = [route for route in routes if route not in parity_routes]
+        self.assertEqual(len(legacy_routes), 69)
+        digest = hashlib.sha256(json.dumps(sorted(legacy_routes)).encode()).hexdigest()
         self.assertEqual(digest, "13a9ddf8ce5bfa3ad30dd721fb5f503e62094d42744b45e0fab9bc3db53383b1")
 
     def test_repeated_message_is_saved_and_published_once(self):

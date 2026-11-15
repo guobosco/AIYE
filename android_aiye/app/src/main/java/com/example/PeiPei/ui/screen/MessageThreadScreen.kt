@@ -534,6 +534,22 @@ fun MessageThreadScreen(
                         peerIdForProfile = peerId,
                         message = message
                     )
+                    if (message.senderId == currentUser.id && message.id.startsWith("local-")) {
+                        TextButton(
+                            enabled = !sending,
+                            onClick = {
+                                if (sending || repository == null) return@TextButton
+                                sending = true
+                                coroutineScope.launch {
+                                    try {
+                                        if (repository.retryChatMessage(message) == null) {
+                                            Toast.makeText(context, "重试失败，请稍后再试", Toast.LENGTH_SHORT).show()
+                                        }
+                                    } finally { sending = false }
+                                }
+                            }
+                        ) { Text("未确认发送，点此重试", color = Color.Red) }
+                    }
                 }
             }
 
@@ -568,7 +584,6 @@ fun MessageThreadScreen(
                         val sent = sendMessage(content = text)
                         if (!sent) {
                             Toast.makeText(context, "消息发送失败", Toast.LENGTH_SHORT).show()
-                            draft = text
                         }
                         sending = false
                     }

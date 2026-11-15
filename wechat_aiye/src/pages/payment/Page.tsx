@@ -1,13 +1,14 @@
 import React, { useRef, useState } from 'react';
 import Taro from '@tarojs/taro';
 import { Input, Text, Textarea, View } from '@tarojs/components';
-import { createConversation, getItem, sendMessage, showError } from '@/services/api';
+import { createConversation, getCalendar, getItem, sendMessage, showError } from '@/services/api';
 import { requireLogin, useSession } from '@/store/session';
 import { recordBooking } from '@/store/activity';
 import { useResource } from '@/hooks/useResource';
 import { ActionButton, MenuRow, StateView } from '@/components/UI';
 import { displayLocation, hostOf, uniqueId } from '@/utils/catalog';
 import { decodePriceTiers } from '@/utils/pricing';
+import { bookingDays, dateKey } from '@/utils/booking';
 import type { Experience, ItemKind, Service } from '@/types/models';
 import styles from '@/styles/page.module.scss';
 
@@ -44,6 +45,15 @@ export default function PaymentPage() {
     if (!host.id) return;
     submitting.current = true; setBusy(true);
     try {
+      if (kind === 'service') {
+        const freshItem = await getItem(kind, item.id) as Service;
+        const calendar = await getCalendar(item.id);
+        const selected = new Date(scheduled);
+        const clock = `${String(selected.getHours()).padStart(2, '0')}:${String(selected.getMinutes()).padStart(2, '0')}`;
+        if (!bookingDays(freshItem, new Date(), calendar.days).some(day => day.key === dateKey(selected) && day.times.includes(clock))) {
+          throw new Error('该时间已不可订，请返回详情重新选择');
+        }
+      }
       const conversation = await createConversation(host.id);
       const time = new Date(scheduled).toLocaleString();
       const content = [`你好，我想咨询“${item.title}”。`,

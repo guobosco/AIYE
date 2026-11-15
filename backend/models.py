@@ -202,6 +202,7 @@ class Service(Base):
     is_important = Column(Boolean, default=False)
     sort_priority = Column(Integer, default=0, index=True)
     is_draft = Column(Boolean, default=False, nullable=False)
+    record_hidden = Column(Boolean, default=False, nullable=False)
     review_status = Column(String, default="approved", index=True)
     review_note = Column(Text, default="")
     review_submitted_at = Column(BigInteger, default=0)
@@ -237,6 +238,8 @@ class Experience(Base):
     badge_text = Column(String, default="")
     tags = Column(JSON, default=list)
     average_rating = Column(Float, default=0.0)
+    is_draft = Column(Boolean, default=False, nullable=False)
+    record_hidden = Column(Boolean, default=False, nullable=False)
     review_status = Column(String, default="approved", index=True)
     review_note = Column(Text, default="")
     review_submitted_at = Column(BigInteger, default=0)
@@ -249,6 +252,18 @@ class Experience(Base):
     is_synced = Column(Boolean, default=True)
 
     host_user = relationship("User", back_populates="experiences")
+
+class CalendarClosure(Base):
+    __tablename__ = "calendar_closures"
+
+    id = Column(String, primary_key=True)
+    service_id = Column(String, ForeignKey("services.id"), index=True, nullable=False)
+    day = Column(String, nullable=False)
+    all_day = Column(Boolean, default=True, nullable=False)
+    start = Column(String, default="00:00", nullable=False)
+    end = Column(String, default="23:59", nullable=False)
+    version = Column(Integer, default=1, nullable=False)
+    active = Column(Boolean, default=True, nullable=False)
 
 
 class WishlistGroup(Base):

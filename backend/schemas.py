@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 # --- User Schemas (用户相关 Schema) ---
 
@@ -466,6 +466,7 @@ class ExperienceBase(BaseModel):
     tags: List[str] = Field(default_factory=list)
     host_name: str = ""
     is_deleted: bool = False
+    is_draft: bool = False
     review_status: str = "approved"
     review_note: str = ""
     review_submitted_at: int = 0
@@ -524,6 +525,23 @@ class Experience(ExperienceBase):
 
     class Config:
         from_attributes = True
+
+class CalendarDay(BaseModel):
+    allDay: bool = True
+    start: str = Field(default="00:00", pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+    end: str = Field(default="23:59", pattern=r"^(?:(?:[01]\d|2[0-3]):[0-5]\d|24:00)$")
+    version: int = Field(default=0, ge=0)
+    active: bool = True
+
+    @model_validator(mode="after")
+    def check_window(self):
+        if not self.allDay and self.active and self.start >= self.end:
+            raise ValueError("Closure end must be after start")
+        return self
+
+
+class CalendarResponse(BaseModel):
+    days: Dict[str, CalendarDay] = Field(default_factory=dict)
 
 class ConversationBase(BaseModel):
     type: str = "direct"

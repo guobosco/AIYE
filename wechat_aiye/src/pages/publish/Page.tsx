@@ -165,7 +165,7 @@ export default function PublishPage() {
   };
   const submit = async (draft: boolean) => {
     if (operation.current || readyKey !== formKey || !requireLogin()) return;
-    if (!form.title?.trim()) { void Taro.showToast({ title: '请填写标题', icon: 'none' }); return; }
+    if (!draft && !form.title?.trim()) { void Taro.showToast({ title: '请填写标题', icon: 'none' }); return; }
     if (!draft && (!form.description?.trim() || !form.location?.trim() || !form.image_urls?.length)) {
       void Taro.showToast({ title: '请填写介绍、地点并上传图片', icon: 'none' }); return;
     }
@@ -196,7 +196,7 @@ export default function PublishPage() {
         ? encodePriceTiers(priced.map(tier => ({ ...tier, price: `¥${tier.price.replace(/^[¥￥]\s*/, '')}` }))) : {};
       const options = publicationOptions(form.category);
       const payload: Form = {
-        ...form, ...prices, id: params.id || form.id || draftIds.current[kind], title: form.title.trim(),
+        ...form, ...prices, id: params.id || form.id || draftIds.current[kind], title: form.title?.trim() || '未命名草稿',
         service_declarations_extra: splitLines(declarationsText).slice(0, 30), tags: splitLines(tagsText).slice(0, 30),
         cover_image_url: form.image_urls?.[0] || '', created_at: form.created_at || now, updated_at: now,
         creator_id: user.id, creator: user.name, host_id: user.id, host_name: user.name,
@@ -205,10 +205,6 @@ export default function PublishPage() {
         service_extra_fee_tags: normalizePublicationTags(form.service_extra_fee_tags || [], options.fees),
         is_draft: draft, review_status: draft ? 'draft' : 'pending_review', is_deleted: false,
       };
-      if (kind === 'experience' && draft) {
-        Taro.setStorageSync(draftKey, { form: payload, tiers });
-        void Taro.showToast({ title: '已保存本机草稿', icon: 'success' }); return;
-      }
       await saveItem(kind, payload, !!params.id);
       Taro.removeStorageSync(draftKey);
       setReadyKey('');

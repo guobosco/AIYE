@@ -1,2 +1,6 @@
 @use '@/styles/variables.scss' as *;
 @forward '@/styles/page.module.scss';
+.filters { display: flex; gap: 16rpx; margin-bottom: 24rpx; }
+.filter { flex: 1; min-height: 88rpx; display: flex; align-items: center; justify-content: center; border-radius: 24rpx; background: $color-bg-page; color: $color-text-secondary; font-size: 28rpx; @include interactive; }
+.selected { background: $color-text-primary; color: $color-text-inverse; }
+.missingPhoto { width: 206rpx; height: 206rpx; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-radius: 16rpx; background: $color-bg-page; color: $color-text-secondary; font-size: 24rpx; }

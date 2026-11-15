@@ -74,6 +74,20 @@ data class FavoriteServicesPayload(
     @SerializedName("service_ids") val serviceIds: List<String>
 )
 
+data class FavoriteExperiencesPayload(
+    @SerializedName("experience_ids") val experienceIds: List<String>
+)
+
+data class CalendarDayPayload(
+    val allDay: Boolean = true,
+    val start: String = "00:00",
+    val end: String = "23:59",
+    val version: Int = 0,
+    val active: Boolean = true
+)
+
+data class CalendarPayload(val days: Map<String, CalendarDayPayload> = emptyMap())
+
 data class WishlistGroupPayload(
     val name: String,
     @SerializedName("service_ids") val serviceIds: List<String>
@@ -98,6 +112,36 @@ data class RegisterRequest(
 )
 
 interface ApiService {
+    @GET("me/wishlist/experiences")
+    suspend fun getMyFavoriteExperiences(): FavoriteExperiencesPayload
+
+    @PUT("me/wishlist/experiences")
+    suspend fun updateMyFavoriteExperiences(@Body body: FavoriteExperiencesPayload): FavoriteExperiencesPayload
+
+    @GET("services/{id}/calendar")
+    suspend fun getCalendar(@Path("id") id: String): CalendarPayload
+
+    @PUT("services/{id}/calendar/{day}")
+    suspend fun saveCalendarDay(@Path("id") id: String, @Path("day") day: String, @Body body: CalendarDayPayload): CalendarDayPayload
+
+    @DELETE("services/{id}/record")
+    suspend fun hideServiceRecord(@Path("id") id: String): Map<String, Boolean>
+
+    @DELETE("experiences/{id}/record")
+    suspend fun hideExperienceRecord(@Path("id") id: String): Map<String, Boolean>
+
+    @POST("experiences/")
+    suspend fun createExperience(@Body experience: Experience): Experience
+
+    @PUT("experiences/{id}")
+    suspend fun updateExperience(@Path("id") id: String, @Body experience: Experience): Experience
+
+    @GET("experiences/")
+    suspend fun getMyExperiences(@Query("skip") skip: Int = 0, @Query("limit") limit: Int = 100): List<Experience>
+
+    @DELETE("experiences/{id}")
+    suspend fun deleteExperience(@Path("id") id: String): Experience
+
     @POST("auth/phone/login")
     suspend fun loginWithPhoneCode(@Body request: PhoneLoginRequest): AuthSessionResponse
 

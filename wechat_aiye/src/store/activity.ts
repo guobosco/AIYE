@@ -4,8 +4,22 @@ import { hostOf, uniqueId } from '@/utils/catalog';
 import type { ActivityRecord, CalendarClosure, Experience, ItemKind, Service } from '@/types/models';
 
 const key = (name: string) => `aiye.${name}.${getSession().user?.id || 'guest'}`;
-export const getActivity = (name: 'viewed' | 'booked'): ActivityRecord[] =>
-  Taro.getStorageSync<ActivityRecord[]>(key(name)) || [];
+export const getActivity = (name: 'viewed' | 'booked'): ActivityRecord[] => {
+  const stored: unknown = Taro.getStorageSync(key(name));
+  if (stored === undefined || stored === null || stored === '') return [];
+  if (!Array.isArray(stored) || stored.some((record: ActivityRecord) => !record || typeof record !== 'object'
+    || typeof record.id !== 'string' || !record.id || typeof record.item_id !== 'string' || !record.item_id
+    || !['service', 'experience'].includes(record.kind) || typeof record.title !== 'string'
+    || !Number.isFinite(record.recorded_at)
+    || (record.scheduled_at !== undefined && !Number.isFinite(record.scheduled_at))
+    || (record.status !== undefined && !['inquiry', 'cancelled'].includes(record.status))
+    || ['cover_image_url', 'location', 'price_text', 'category', 'host_id', 'host_name', 'conversation_id']
+      .some(field => {
+        const value = record[field as keyof ActivityRecord];
+        return value !== undefined && typeof value !== 'string';
+      }))) throw new Error('本机记录格式异常，未修改原记录');
+  return JSON.parse(JSON.stringify(stored)) as ActivityRecord[];
+};
 export const recordView = (item: Service | Experience, kind: ItemKind) => {
   const host = hostOf(item, kind);
   const record: ActivityRecord = {

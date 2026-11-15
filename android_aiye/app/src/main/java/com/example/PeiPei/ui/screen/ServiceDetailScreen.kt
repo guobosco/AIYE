@@ -615,7 +615,13 @@ fun ServiceDetailScreen(
     }
     val service by serviceFlow.collectAsState(initial = null)
     val currentUser by AppDataStore.currentUser.collectAsState()
-    val isLoggedIn = currentUser.id.isNotEmpty()
+    val isLoggedIn = currentUser.id.isNotEmpty() && currentUser.isPhoneVerified &&
+        listOf(currentUser.name, currentUser.gender, currentUser.region, currentUser.photoUrl).all { it.isNotBlank() }
+    val accountRoute = when {
+        currentUser.id.isBlank() -> Screen.Login.createRoute()
+        !currentUser.isPhoneVerified -> Screen.WeChatBindPhone.route
+        else -> Screen.CompleteProfile.route
+    }
     val contacts by AppDataStore.contacts.collectAsState()
     val favoriteServiceIds by AppDataStore.favoriteServiceIds.collectAsState()
     val chatRepository = AppDataStore.getRepository()
@@ -667,6 +673,7 @@ fun ServiceDetailScreen(
     val isCreator = service!!.creatorId == currentUser.id
     var showCreatorPriceSheet by remember { androidx.compose.runtime.mutableStateOf(false) }
     var showUnpublishConfirm by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var unpublishing by remember { androidx.compose.runtime.mutableStateOf(false) }
     var creatorPriceLaunchConsumed by remember(serviceId, openCreatorPriceOnLaunch) {
         androidx.compose.runtime.mutableStateOf(false)
     }
@@ -938,10 +945,19 @@ fun ServiceDetailScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        AppDataStore.deleteService(service!!.id)
-                        showUnpublishConfirm = false
-                        handleServiceDetailBack()
-                    }
+                        val id = service?.id ?: return@TextButton
+                        unpublishing = true
+                        scope.launch {
+                            try {
+                                requireNotNull(chatRepository).deleteService(id)
+                                showUnpublishConfirm = false
+                                handleServiceDetailBack()
+                            } catch (error: Exception) {
+                                snackbarHostState.showSnackbar(error.message ?: "下架失败，请重试")
+                            } finally { unpublishing = false }
+                        }
+                    },
+                    enabled = !unpublishing
                 ) {
                     Text("确定下架", color = Color(0xFFE0115F))
                 }
@@ -1124,7 +1140,7 @@ fun ServiceDetailScreen(
                             Button(
                                 onClick = {
                                     if (!isLoggedIn) {
-                                        rootNavController.navigate(Screen.Login.createRoute()) { launchSingleTop = true }
+                                        rootNavController.navigate(accountRoute) { launchSingleTop = true }
                                         return@Button
                                     }
                                     showBookingSelectionSheet = true
@@ -1173,7 +1189,7 @@ fun ServiceDetailScreen(
                                 return@ServiceHeroSection
                             }
                             if (!isLoggedIn) {
-                                rootNavController.navigate(Screen.Login.createRoute()) { launchSingleTop = true }
+                                rootNavController.navigate(accountRoute) { launchSingleTop = true }
                                 return@ServiceHeroSection
                             }
                             if (isFavorite) {
@@ -1299,7 +1315,7 @@ fun ServiceDetailScreen(
                             Button(
                                 onClick = {
                                     if (!isLoggedIn) {
-                                        rootNavController.navigate(Screen.Login.createRoute()) { launchSingleTop = true }
+                                        rootNavController.navigate(accountRoute) { launchSingleTop = true }
                                         return@Button
                                     }
                                     inquiryComposeMessage = ""
@@ -2145,6 +2161,7 @@ private fun ServiceInquiryDatePickerDialog(
                     }
 
                     Spacer(modifier = Modifier.height(6.dp))
+                    val calendarReady = CalendarLoadGate(service.id)
                     DatePicker(
                         state = datePickerState,
                         modifier = Modifier
@@ -2184,7 +2201,9 @@ private fun ServiceInquiryDatePickerDialog(
                                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp)
                             )
                         }
-                        val canSave = datePickerState.selectedDateMillis != null
+                        val canSave = calendarReady && datePickerState.selectedDateMillis?.let {
+                            selectableDates.isSelectableDate(it)
+                        } == true
                         Surface(
                             color = if (canSave) Color(0xFF111111) else Color(0xFFF1F1F1),
                             shape = RoundedCornerShape(16.dp),

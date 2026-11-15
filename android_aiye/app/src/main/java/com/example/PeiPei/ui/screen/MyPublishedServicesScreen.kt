@@ -73,6 +73,10 @@ import com.example.aiye.data.repository.LuluRepository
 import com.example.aiye.ui.navigation.Screen
 import androidx.compose.runtime.collectAsState
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import android.widget.Toast
 
 private val PageBg = Color(0xFFFFFFFF)
 private val TitleColor = Color(0xFF000000)
@@ -137,10 +141,27 @@ fun MyPublishedServicesScreen(
     initialSection: String? = null,
 ) {
     val repository = remember { runCatching { LuluRepository.get() }.getOrNull() }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    var hiding by remember { mutableStateOf(false) }
     val hubFlow = remember(repository) {
         repository?.myCreatedListingsHub ?: flowOf(emptyList())
     }
     val rawListings by hubFlow.collectAsState(initial = emptyList())
+    fun republish(id: String) {
+        if (hiding) return
+        hiding = true
+        scope.launch {
+            try {
+                val item = requireNotNull(rawListings.firstOrNull { it.id == id })
+                requireNotNull(repository).updateServiceConfirmed(item.copy(isDeleted = false, isDraft = false))
+                android.widget.Toast.makeText(context, "已重新提交审核", android.widget.Toast.LENGTH_SHORT).show()
+            } catch (error: Exception) {
+                android.widget.Toast.makeText(context, error.message ?: "重新发布失败，请重试", android.widget.Toast.LENGTH_LONG).show()
+            } finally { hiding = false }
+        }
+    }
+    LaunchedEffect(repository) { repository?.fetchAndSyncServices() }
     val sectionAnchor = remember(initialSection) { parseMyPublishedSectionAnchor(initialSection) }
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var gridMode by rememberSaveable { mutableStateOf(false) }
@@ -195,6 +216,11 @@ fun MyPublishedServicesScreen(
         topBar = {
             CenterAlignedTopAppBar(
                 title = { },
+                actions = {
+                    TextButton(onClick = { navController.navigate(Screen.MyExperiences.createRoute()) }) {
+                        Text("体验")
+                    }
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回", tint = TitleColor)
@@ -297,7 +323,7 @@ fun MyPublishedServicesScreen(
                                                 Screen.CreateService.createRoute(serviceId = s.id)
                                             ) { launchSingleTop = true }
                                         },
-                                        Triple("删除记录", true) { deleteRecordStep1Id = s.id },
+                                        Triple("隐藏记录", true) { deleteRecordStep1Id = s.id },
                                     ),
                                 )
                             },
@@ -327,8 +353,8 @@ fun MyPublishedServicesScreen(
                                                 Screen.CreateService.createRoute(serviceId = s.id)
                                             ) { launchSingleTop = true }
                                         },
-                                        Triple("重新发布", false) { AppDataStore.republishService(s.id) },
-                                        Triple("删除记录", true) { deleteRecordStep1Id = s.id },
+                                        Triple("重新发布", false) { republish(s.id) },
+                                        Triple("隐藏记录", true) { deleteRecordStep1Id = s.id },
                                     ),
                                 )
                             },
@@ -422,7 +448,7 @@ fun MyPublishedServicesScreen(
                                                 Screen.CreateService.createRoute(serviceId = s.id)
                                             ) { launchSingleTop = true }
                                         },
-                                        Triple("删除记录", true) { deleteRecordStep1Id = s.id },
+                                        Triple("隐藏记录", true) { deleteRecordStep1Id = s.id },
                                     ),
                                 )
                             },
@@ -451,8 +477,8 @@ fun MyPublishedServicesScreen(
                                                 Screen.CreateService.createRoute(serviceId = s.id)
                                             ) { launchSingleTop = true }
                                         },
-                                        Triple("重新发布", false) { AppDataStore.republishService(s.id) },
-                                        Triple("删除记录", true) { deleteRecordStep1Id = s.id },
+                                        Triple("重新发布", false) { republish(s.id) },
+                                        Triple("隐藏记录", true) { deleteRecordStep1Id = s.id },
                                     ),
                                 )
                             },
@@ -472,9 +498,18 @@ fun MyPublishedServicesScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        AppDataStore.deleteService(unpublishTargetId!!)
-                        unpublishTargetId = null
+                        val id = unpublishTargetId ?: return@TextButton
+                        hiding = true
+                        scope.launch {
+                            try {
+                                requireNotNull(repository).deleteService(id)
+                                unpublishTargetId = null
+                            } catch (error: Exception) {
+                                android.widget.Toast.makeText(context, error.message ?: "下架失败，请重试", android.widget.Toast.LENGTH_LONG).show()
+                            } finally { hiding = false }
+                        }
                     },
+                    enabled = !hiding,
                     colors = ButtonDefaults.textButtonColors(contentColor = ActionDangerColor),
                 ) {
                     Text("确定下架")
@@ -490,8 +525,8 @@ fun MyPublishedServicesScreen(
     if (deleteRecordStep1Id != null) {
         AlertDialog(
             onDismissRequest = { deleteRecordStep1Id = null },
-            title = { Text("删除记录") },
-            text = { Text("确定要删除这条记录吗？") },
+            title = { Text("隐藏记录") },
+            text = { Text("仅从我的列表隐藏，服务端保留内容，不影响历史聊天引用。") },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -513,16 +548,25 @@ fun MyPublishedServicesScreen(
         AlertDialog(
             onDismissRequest = { deleteRecordStep2Id = null },
             title = { Text("再次确认") },
-            text = { Text("删除后无法恢复，确定删除？") },
+            text = { Text("隐藏结果会同步到其他客户端，确定隐藏？") },
             confirmButton = {
                 TextButton(
+                    enabled = !hiding,
                     onClick = {
-                        AppDataStore.purgeCreatedServiceRecord(deleteRecordStep2Id!!)
-                        deleteRecordStep2Id = null
+                        val id = deleteRecordStep2Id ?: return@TextButton
+                        hiding = true
+                        scope.launch {
+                            try {
+                                requireNotNull(repository).purgeMyCreatedServiceRecord(id)
+                                deleteRecordStep2Id = null
+                            } catch (e: Exception) {
+                                Toast.makeText(context, "隐藏失败，请重试", Toast.LENGTH_SHORT).show()
+                            } finally { hiding = false }
+                        }
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = ActionDangerColor),
                 ) {
-                    Text("删除")
+                    Text("隐藏")
                 }
             },
             dismissButton = {

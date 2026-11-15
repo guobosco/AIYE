@@ -483,7 +483,13 @@ fun ExperienceDetailScreen(
         value = cleanId?.let { loadExperienceDetailItem(it) }
     }
     val currentUser by AppDataStore.currentUser.collectAsState()
-    val isLoggedIn = currentUser.id.isNotEmpty()
+    val isLoggedIn = currentUser.id.isNotEmpty() && currentUser.isPhoneVerified &&
+        listOf(currentUser.name, currentUser.gender, currentUser.region, currentUser.photoUrl).all { it.isNotBlank() }
+    val accountRoute = when {
+        currentUser.id.isBlank() -> Screen.Login.createRoute()
+        !currentUser.isPhoneVerified -> Screen.WeChatBindPhone.route
+        else -> Screen.CompleteProfile.route
+    }
     val contacts by AppDataStore.contacts.collectAsState()
     val chatRepository = AppDataStore.getRepository()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -494,7 +500,14 @@ fun ExperienceDetailScreen(
         }
     }
     var fullscreenImageIndex by remember { mutableIntStateOf(-1) }
-    var isFavorite by remember { androidx.compose.runtime.mutableStateOf(false) }
+    val favoriteIds by AppDataStore.favoriteExperienceIds.collectAsState()
+    val isFavorite = cleanId != null && cleanId in favoriteIds
+    LaunchedEffect(currentUser.id) {
+        if (isLoggedIn) {
+            try { AppDataStore.refreshFavoriteExperiences() }
+            catch (e: Exception) { snackbarHostState.showSnackbar("收藏加载失败，请重试") }
+        }
+    }
     var isTogglingFavorite by remember { androidx.compose.runtime.mutableStateOf(false) }
     var showRemoveFavoriteConfirm by remember { androidx.compose.runtime.mutableStateOf(false) }
     var isHeroImageDark by remember { androidx.compose.runtime.mutableStateOf(true) }
@@ -635,8 +648,10 @@ fun ExperienceDetailScreen(
                         scope.launch {
                             isTogglingFavorite = true
                             try {
-                                isFavorite = false
+                                AppDataStore.setFavoriteExperience(checkNotNull(cleanId), false)
                                 snackbarHostState.showSnackbar("已移出心愿单")
+                            } catch (e: Exception) {
+                                snackbarHostState.showSnackbar("移出失败，请重试")
                             } finally {
                                 isTogglingFavorite = false
                             }
@@ -832,7 +847,7 @@ fun ExperienceDetailScreen(
                     Button(
                         onClick = {
                             if (!isLoggedIn) {
-                                rootNavController.navigate(Screen.Login.createRoute()) { launchSingleTop = true }
+                                rootNavController.navigate(accountRoute) { launchSingleTop = true }
                                 return@Button
                             }
                             inquiryComposeMessage = "你好，我想咨询“${item.title}”的${selectedExperienceTier.label}，麻烦帮我介绍一下具体安排。"
@@ -883,7 +898,7 @@ fun ExperienceDetailScreen(
                                 return@ServiceHeroSection
                             }
                             if (!isLoggedIn) {
-                                rootNavController.navigate(Screen.Login.createRoute()) { launchSingleTop = true }
+                                rootNavController.navigate(accountRoute) { launchSingleTop = true }
                                 return@ServiceHeroSection
                             }
                             if (isFavorite) {
@@ -893,8 +908,10 @@ fun ExperienceDetailScreen(
                                     if (isTogglingFavorite) return@launch
                                     isTogglingFavorite = true
                                     try {
-                                        isFavorite = true
+                                        AppDataStore.setFavoriteExperience(checkNotNull(cleanId), true)
                                         snackbarHostState.showSnackbar("已加入心愿单")
+                                    } catch (e: Exception) {
+                                        snackbarHostState.showSnackbar("收藏失败，请重试")
                                     } finally {
                                         isTogglingFavorite = false
                                     }
@@ -998,7 +1015,7 @@ fun ExperienceDetailScreen(
                             Button(
                                 onClick = {
                                     if (!isLoggedIn) {
-                                        rootNavController.navigate(Screen.Login.createRoute()) { launchSingleTop = true }
+                                        rootNavController.navigate(accountRoute) { launchSingleTop = true }
                                         return@Button
                                     }
                                     inquiryComposeMessage = ""

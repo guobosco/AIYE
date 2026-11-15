@@ -42,6 +42,12 @@ data class Experience(
     val updatedAt: Long = 0L,
     @SerializedName("is_deleted")
     val isDeleted: Boolean = false,
+    @SerializedName("is_draft")
+    val isDraft: Boolean = false,
+    @SerializedName("review_status")
+    val reviewStatus: String = "approved",
+    @SerializedName("review_note")
+    val reviewNote: String = "",
     @SerializedName("is_synced")
     val isSynced: Boolean = true,
 )

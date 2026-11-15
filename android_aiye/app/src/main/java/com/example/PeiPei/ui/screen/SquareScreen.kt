@@ -291,6 +291,9 @@ fun SquareScreen(
                     .padding(top = 10.dp),
                 horizontalArrangement = Arrangement.End
             ) {
+                TextButton(onClick = {
+                    navController.navigate(Screen.MyExperiences.createRoute(favorites = true))
+                }) { Text("体验心愿单") }
                 WishlistHeaderActionButton(
                     icon = Icons.Outlined.Search,
                     contentDescription = "搜索",

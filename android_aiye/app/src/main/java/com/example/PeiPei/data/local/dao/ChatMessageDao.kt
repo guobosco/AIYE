@@ -6,6 +6,7 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
 import com.example.aiye.data.model.ChatMessage
 import kotlinx.coroutines.flow.Flow
 
@@ -19,7 +20,7 @@ interface ChatMessageDao {
 
     @Query(
         "SELECT * FROM chat_messages " +
-            "WHERE conversationId = :conversationId AND currentUserId = :currentUserId " +
+            "WHERE conversationId = :conversationId AND currentUserId = :currentUserId AND id NOT LIKE 'local-%' " +
             "ORDER BY createdAt DESC, id DESC LIMIT 1"
     )
     suspend fun getLatestMessageByConversation(
@@ -49,6 +50,29 @@ interface ChatMessageDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMessages(messages: List<ChatMessage>)
+
+    @Query("DELETE FROM chat_messages WHERE currentUserId = :userId AND clientMessageId = :clientId AND id LIKE 'local-%'")
+    suspend fun deletePending(userId: String, clientId: String)
+
+    @Query("SELECT COUNT(*) FROM chat_messages WHERE currentUserId = :userId AND clientMessageId = :clientId AND id NOT LIKE 'local-%'")
+    suspend fun confirmedCount(userId: String, clientId: String): Int
+
+    @Transaction
+    suspend fun insertPendingIfUnconfirmed(message: ChatMessage) {
+        val clientId = message.clientMessageId ?: return
+        if (confirmedCount(message.currentUserId, clientId) == 0) insertMessage(message)
+    }
+
+    @Transaction
+    suspend fun insertConfirmed(message: ChatMessage) {
+        message.clientMessageId?.let { deletePending(message.currentUserId, it) }
+        insertMessage(message)
+    }
+
+    @Transaction
+    suspend fun insertConfirmedMessages(messages: List<ChatMessage>) {
+        messages.forEach { insertConfirmed(it) }
+    }
 
     @Query("DELETE FROM chat_messages WHERE conversationId = :conversationId AND currentUserId = :currentUserId")
     suspend fun deleteMessagesByConversation(conversationId: String, currentUserId: String)

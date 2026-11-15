@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.withLock
 import java.time.LocalDate
 
 object AppDataStore {
@@ -64,6 +65,43 @@ object AppDataStore {
     val services: StateFlow<List<Service>> = _services.asStateFlow()
     private val _favoriteServiceIds = MutableStateFlow<Set<String>>(emptySet())
     val favoriteServiceIds: StateFlow<Set<String>> = _favoriteServiceIds.asStateFlow()
+    private val _favoriteExperienceIds = MutableStateFlow<Set<String>>(emptySet())
+    val favoriteExperienceIds = _favoriteExperienceIds.asStateFlow()
+    private val experienceFavoriteLock = kotlinx.coroutines.sync.Mutex()
+
+    suspend fun refreshFavoriteExperiences() {
+        experienceFavoriteLock.lock()
+        try {
+            if (com.example.aiye.data.remote.AuthSession.getAccessToken() == null) return
+            val owner = currentUser.value.id
+            val ids = com.example.aiye.data.remote.RetrofitClient.apiService.getMyFavoriteExperiences().experienceIds
+            if (currentUser.value.id == owner && com.example.aiye.data.remote.AuthSession.getAccessToken() != null) {
+                _favoriteExperienceIds.value = ids.toSet()
+            }
+        } finally { experienceFavoriteLock.unlock() }
+    }
+
+    suspend fun setFavoriteExperience(id: String, favorite: Boolean) {
+        experienceFavoriteLock.lock()
+        try {
+            check(com.example.aiye.data.remote.AuthSession.getAccessToken() != null) { "请先登录" }
+            val owner = currentUser.value.id
+            val api = com.example.aiye.data.remote.RetrofitClient.apiService
+            val ids = api.getMyFavoriteExperiences().experienceIds.toMutableSet()
+            check(currentUser.value.id == owner && com.example.aiye.data.remote.AuthSession.getAccessToken() != null) {
+                "账号已切换，请重新操作"
+            }
+            if (favorite) ids.add(id) else ids.remove(id)
+            val saved = api.updateMyFavoriteExperiences(
+                com.example.aiye.data.remote.FavoriteExperiencesPayload(ids.toList())
+            )
+            if (currentUser.value.id == owner && com.example.aiye.data.remote.AuthSession.getAccessToken() != null) {
+                _favoriteExperienceIds.value = saved.experienceIds.toSet()
+            }
+        } finally {
+            experienceFavoriteLock.unlock()
+        }
+    }
     private val _wishlistGroups = MutableStateFlow(listOf(DEFAULT_WISHLIST_GROUP))
     val wishlistGroups: StateFlow<List<String>> = _wishlistGroups.asStateFlow()
     private val _favoriteServiceGroups = MutableStateFlow<Map<String, String>>(emptyMap())
@@ -93,6 +131,36 @@ object AppDataStore {
         MutableStateFlow<Map<String, Map<String, HostCalendarDayClosure>>>(emptyMap())
     val hostCalendarDayClosures: StateFlow<Map<String, Map<String, HostCalendarDayClosure>>> =
         _hostCalendarDayClosures.asStateFlow()
+    private val calendarVersions = mutableMapOf<String, Map<String, com.example.aiye.data.remote.CalendarDayPayload>>()
+
+    private val calendarLock = kotlinx.coroutines.sync.Mutex()
+
+    suspend fun refreshHostCalendar(serviceId: String) = calendarLock.withLock {
+        val owner = currentUser.value.id
+        val data = com.example.aiye.data.remote.RetrofitClient.apiService.getCalendar(serviceId)
+        check(currentUser.value.id == owner) { "账号已切换，请重新加载" }
+        calendarVersions[serviceId] = data.days
+        _hostCalendarDayClosures.value = _hostCalendarDayClosures.value + (serviceId to
+            data.days.filterValues { it.active }.mapValues { (_, value) ->
+                HostCalendarDayClosure(value.allDay, value.start, value.end)
+            })
+    }
+
+    suspend fun saveHostCalendarDay(serviceId: String, day: String, closure: HostCalendarDayClosure?) = calendarLock.withLock {
+        val owner = currentUser.value.id
+        val body = com.example.aiye.data.remote.CalendarDayPayload(
+            allDay = closure?.allDay ?: true,
+            start = closure?.windowStart?.ifBlank { "00:00" } ?: "00:00",
+            end = closure?.windowEnd?.ifBlank { "23:59" } ?: "23:59",
+            version = calendarVersions[serviceId]?.get(day)?.version ?: 0,
+            active = closure != null
+        )
+        val saved = com.example.aiye.data.remote.RetrofitClient.apiService.saveCalendarDay(serviceId, day, body)
+        check(currentUser.value.id == owner) { "账号已切换，请重新操作" }
+        calendarVersions[serviceId] = calendarVersions[serviceId].orEmpty() + (day to saved)
+        setHostCalendarDayClosure(serviceId, day, if (saved.active)
+            HostCalendarDayClosure(saved.allDay, saved.start, saved.end) else null)
+    }
 
     fun setHostCalendarDayClosure(serviceId: String, dateIso: String, closure: HostCalendarDayClosure?) {
         if (serviceId.isBlank() || dateIso.isBlank()) return
@@ -546,10 +614,12 @@ object AppDataStore {
         _contacts.value = emptyList()
         _services.value = emptyList()
         _favoriteServiceIds.value = emptySet()
+        _favoriteExperienceIds.value = emptySet()
         _wishlistGroups.value = listOf(DEFAULT_WISHLIST_GROUP)
         _favoriteServiceGroups.value = emptyMap()
         _hostServiceBookings.value = emptyMap()
         _hostCalendarDayClosures.value = emptyMap()
+        calendarVersions.clear()
         scope.launch { repository?.logout() }
     }
 

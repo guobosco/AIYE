@@ -384,6 +384,12 @@ const deferred = () => {
   check('all-day local closure', () => assert.equal(booking.bookingDays(rules, now, {
     '2026-11-14': { allDay: true, start: '', end: '' },
   })[0].key, '2026-11-15'));
+  check('inactive server closure allows booking again', () => assert.equal(booking.bookingDays(rules, now, {
+    '2026-11-14': { allDay: true, start: '00:00', end: '23:59', version: 2, active: false },
+  })[0].key, '2026-11-14'));
+  check('server closure excludes only its half-open window', () => assert.deepEqual(booking.bookingDays(rules, now, {
+    '2026-11-14': { allDay: false, start: '10:30', end: '11:00', version: 1, active: true },
+  })[0].times, ['11:00', '11:30']));
   check('scheduled date uses local time', () => assert.equal(booking.scheduledMillis('2026-11-15', '10:30'), new Date(2026, 10, 15, 10, 30).getTime()));
   const tiers = [{ name: '拍摄', price: '¥200', duration_amount: 2, duration_unit: '小时' }];
   const encoded = pricing.encodePriceTiers(tiers);
@@ -861,6 +867,29 @@ const deferred = () => {
   check('publish waits for password login profile hydration', () => assert.equal(hydratingPublisher.render().props.loading, true));
   check('temporary token-only login does not open a duplicate login page', () => assert.equal(navigations.length, beforeHydration));
   hydratingPublisher.unmount();
+  routerParams = { kind: 'experience' };
+  session.setSession('experience-draft-login', readyUser, 'refresh');
+  const experienceDraftWrites = [];
+  requestHandler = async options => {
+    if (options.method === 'POST') {
+      experienceDraftWrites.push(options);
+      return response({ ...options.data, review_status: 'draft' });
+    }
+    return response([]);
+  };
+  const experienceDraftRenderer = createRenderer(PublishPage);
+  experienceDraftRenderer.render(); await flushCallbacks();
+  action(experienceDraftRenderer.render(), '存草稿').props.onClick(); await flushCallbacks();
+  check('blank experience draft is persisted on the shared server', () => {
+    assert.equal(experienceDraftWrites.length, 1);
+    assert.ok(experienceDraftWrites[0].url.endsWith('/experiences/'));
+    assert.equal(experienceDraftWrites[0].data.is_draft, true);
+    assert.equal(experienceDraftWrites[0].data.title, '未命名草稿');
+    assert.equal(experienceDraftWrites[0].data.host_id, readyUser.id);
+  });
+  check('server-confirmed experience draft returns to experience management', () =>
+    assert.equal(navigations.at(-1), 'redirect:/pages/published/index?kind=experience'));
+  experienceDraftRenderer.unmount();
   const ThreadPage = load('src/pages/thread/index.tsx').default;
   const chatIntervals = new Map();
   let chatTimerId = 0;
@@ -1901,6 +1930,262 @@ const deferred = () => {
     assert.equal(chatIntervals.size, 0); assert.equal(keyboardListeners.size, 0);
   });
   intervals = { setInterval, clearInterval };
+  const PublishedPage = load('src/pages/published/index.tsx').default;
+  const ActivityPage = load('src/pages/activity/index.tsx').default;
+  const ownService = { ...actualService, id: 'managed-service', title: 'Managed Studio', category: '摄影',
+    location: '上海', creator_id: readyUser.id, updated_at: 10, is_deleted: false, review_status: 'approved' };
+  const cancelledService = { ...ownService, id: 'cancelled-service', title: 'Cancelled Studio', is_deleted: true, review_status: 'rejected' };
+  let managedDeletes = 0, managedPrompts = 0;
+  const tab = (tree, label) => nodes(tree).find(node => node.type === 'View'
+    && node.props.className?.startsWith('tab') && node.props.children.includes(label));
+  const managedHandler = async options => {
+    if (options.method === 'DELETE') { managedDeletes++; return response({ ...ownService, is_deleted: true }); }
+    return response(options.url.includes('/services/') ? [ownService, cancelledService] : []);
+  };
+  session.setSession('management-login', readyUser, 'refresh');
+  routerParams = {};
+  requestHandler = managedHandler;
+  const managedRenderer = createRenderer(PublishedPage);
+  managedRenderer.render(); await flushCallbacks();
+  let managedTree = managedRenderer.render();
+  check('published management includes cancelled records without treating them as rejected active listings', () => {
+    assert.ok(hasText(managedTree, 'Cancelled Studio'));
+    assert.equal(nodes(managedTree).filter(node => node.type?.name === 'ItemCard').length, 1);
+    assert.equal(nodes(managedTree).filter(node => node.type?.name === 'ActionButton' && node.props.children.includes('取消发布')).length, 1);
+  });
+  nodes(managedTree).find(node => node.type === 'Input').props.onInput({ detail: { value: '  shanghai-no-match  ' } });
+  managedTree = managedRenderer.render();
+  check('published search filters both live and cancelled records', () => assert.ok(!action(managedTree, '取消发布') && !hasText(managedTree, 'Cancelled Studio')));
+  nodes(managedTree).find(node => node.type === 'Input').props.onInput({ detail: { value: '' } });
+  managedTree = managedRenderer.render();
+  const managementModal = deferred();
+  taro.showModal = async options => { managedPrompts++; assert.ok(options.content.includes('不会撤回聊天问询')); return managementModal.promise; };
+  action(managedTree, '取消发布').props.onClick();
+  action(managedTree, '取消发布').props.onClick();
+  tab(managedTree, '体验').props.onClick();
+  await flushCallbacks();
+  check('unpublish locks synchronously before modal and prevents a kind switch', () => {
+    assert.equal(managedPrompts, 1); assert.equal(managedDeletes, 0);
+    assert.ok(action(managedRenderer.render(), '日历'));
+  });
+  managementModal.resolve({ confirm: true }); await flushCallbacks();
+  managedTree = managedRenderer.render();
+  check('confirmed unpublish sends once and retains cancelled management records', () => {
+    assert.equal(managedDeletes, 1); assert.equal(toasts.at(-1), '已取消发布');
+    assert.ok(hasText(managedTree, ownService.title)); assert.ok(!action(managedTree, '取消发布'));
+  });
+  tab(managedTree, '已取消').props.onClick(); managedTree = managedRenderer.render();
+  check('cancelled filter contains the acknowledgement and preexisting cancelled row', () => {
+    assert.equal(nodes(managedTree).filter(node => node.props.className === 'cancelledRecord').length, 2);
+  });
+  managedRenderer.unmount();
+  requestHandler = managedHandler;
+  const oldManagedRenderer = createRenderer(PublishedPage);
+  oldManagedRenderer.render(); await flushCallbacks();
+  let oldManagedTree = oldManagedRenderer.render();
+  const oldManagedModal = deferred();
+  taro.showModal = () => oldManagedModal.promise;
+  action(oldManagedTree, '取消发布').props.onClick();
+  session.setSession('management-relogin', readyUser, 'refresh');
+  oldManagedTree = oldManagedRenderer.render(); await flushCallbacks();
+  const deleteCountBeforeOldModal = managedDeletes;
+  oldManagedModal.resolve({ confirm: true }); await flushCallbacks();
+  check('same-account relogin invalidates an earlier unpublish modal', () => assert.equal(managedDeletes, deleteCountBeforeOldModal));
+  oldManagedRenderer.unmount();
+  taro.showModal = async () => ({ confirm: true });
+  requestHandler = async options => options.method === 'DELETE' ? response({ detail: 'Cannot unpublish' }, 503) : managedHandler(options);
+  const failedManagedRenderer = createRenderer(PublishedPage);
+  failedManagedRenderer.render(); await flushCallbacks();
+  action(failedManagedRenderer.render(), '取消发布').props.onClick(); await flushCallbacks();
+  check('failed unpublish retains active row and permits a retry', () => {
+    assert.ok(action(failedManagedRenderer.render(), '取消发布')); assert.equal(toasts.at(-1), 'Cannot unpublish');
+  });
+  failedManagedRenderer.unmount();
+  let lifecycleRows = [{ ...cancelledService }];
+  const lifecycleWrites = [];
+  requestHandler = async options => {
+    if (options.method === 'DELETE') {
+      lifecycleWrites.push(options);
+      lifecycleRows = [];
+      return response({ hidden: true });
+    }
+    if (options.method === 'PUT') {
+      lifecycleWrites.push(options);
+      lifecycleRows = [{ ...options.data, review_status: 'pending_review' }];
+      return response(lifecycleRows[0]);
+    }
+    return response(lifecycleRows);
+  };
+  const lifecycleRenderer = createRenderer(PublishedPage);
+  lifecycleRenderer.render(); await flushCallbacks();
+  action(lifecycleRenderer.render(), '重新发布').props.onClick(); await flushCallbacks();
+  check('restore submits the original service to review instead of creating a replacement', () => {
+    assert.ok(lifecycleWrites[0].url.endsWith(`/services/${cancelledService.id}`));
+    assert.equal(lifecycleWrites[0].method, 'PUT');
+    assert.equal(lifecycleWrites[0].data.is_deleted, false);
+    assert.equal(lifecycleWrites[0].data.is_draft, false);
+    assert.ok(hasText(lifecycleRenderer.render(), '待审核'));
+  });
+  lifecycleRenderer.unmount();
+  lifecycleRows = [{ ...cancelledService }];
+  const hideRenderer = createRenderer(PublishedPage);
+  hideRenderer.render(); await flushCallbacks();
+  action(hideRenderer.render(), '隐藏记录').props.onClick(); await flushCallbacks();
+  check('record hiding uses the shared record endpoint and reloads management', () => {
+    assert.ok(lifecycleWrites.at(-1).url.endsWith(`/services/${cancelledService.id}/record`));
+    assert.ok(!hasText(hideRenderer.render(), cancelledService.title));
+    assert.equal(toasts.at(-1), '已隐藏记录');
+  });
+  hideRenderer.unmount();
+  lifecycleRows = [{ ...cancelledService }];
+  requestHandler = async options => options.method === 'DELETE'
+    ? response({ detail: 'Cannot hide record' }, 503) : response(lifecycleRows);
+  const failedHideRenderer = createRenderer(PublishedPage);
+  failedHideRenderer.render(); await flushCallbacks();
+  action(failedHideRenderer.render(), '隐藏记录').props.onClick(); await flushCallbacks();
+  check('failed record hiding retains the row and a retry action', () => {
+    assert.ok(hasText(failedHideRenderer.render(), cancelledService.title));
+    assert.ok(action(failedHideRenderer.render(), '隐藏记录'));
+    assert.equal(toasts.at(-1), 'Cannot hide record');
+  });
+  failedHideRenderer.unmount();
+  const activityStore = load('src/store/activity.ts');
+  const historyRecord = { id: 'viewed-one', item_id: ownService.id, kind: 'service', title: 'Owner A Record',
+    location: '上海', category: '摄影', host_name: 'Studio Host', cover_image_url: '', price_text: '100元',
+    host_id: otherUser.id, recorded_at: Date.now(), scheduled_at: Date.now() + 86400000,
+    status: 'inquiry', conversation_id: 'activity-chat' };
+  const viewedKey = `aiye.viewed.${readyUser.id}`;
+  const otherViewedKey = `aiye.viewed.${otherUser.id}`;
+  storage.set(viewedKey, [historyRecord]);
+  storage.set(otherViewedKey, [{ ...historyRecord, id: 'other-view', title: 'Owner B Record' }]);
+  routerParams = { type: 'viewed' };
+  session.setSession('activity-view-login', readyUser, 'refresh');
+  const activityRenderer = createRenderer(ActivityPage);
+  activityRenderer.render();
+  let activityTree = activityRenderer.render();
+  check('viewed records load on mount and support missing-cover fallback', () => {
+    assert.ok(hasText(activityTree, 'Owner A Record')); assert.ok(hasText(activityTree, '暂无图片'));
+  });
+  nodes(activityTree).find(node => node.type === 'Input').props.onInput({ detail: { value: 'studio host' } });
+  activityTree = activityRenderer.render();
+  check('activity search matches host names without case sensitivity', () => assert.ok(hasText(activityTree, 'Owner A Record')));
+  const clearModal = deferred();
+  let clearPrompts = 0;
+  taro.showModal = options => { clearPrompts++; assert.ok(options.content.includes('全部本机浏览记录')); return clearModal.promise; };
+  action(activityTree, '清空').props.onClick();
+  action(activityTree, '清空').props.onClick();
+  session.setSession('activity-switch-owner', otherUser, 'refresh');
+  const immediateSwitchedTree = activityRenderer.render();
+  check('account switch immediately hides previous activity rows before next load render', () => assert.ok(!hasText(immediateSwitchedTree, 'Owner A Record')));
+  activityTree = activityRenderer.render();
+  clearModal.resolve({ confirm: true }); await flushCallbacks();
+  check('stale clear modal cannot erase either account and the replacement rows load', () => {
+    assert.equal(clearPrompts, 1);
+    assert.equal(storage.get(viewedKey).length, 1); assert.equal(storage.get(otherViewedKey).length, 1);
+    assert.ok(hasText(activityRenderer.render(), 'Owner B Record'));
+  });
+  activityRenderer.unmount();
+  session.setSession('activity-booked-login', readyUser, 'refresh');
+  routerParams = { type: 'booked' };
+  const bookedKey = `aiye.booked.${readyUser.id}`;
+  storage.set(bookedKey, [historyRecord, { ...historyRecord, id: 'past', title: 'Past inquiry', scheduled_at: 1 }]);
+  const bookedRenderer = createRenderer(ActivityPage);
+  bookedRenderer.render();
+  let bookedTree = bookedRenderer.render();
+  check('booked defaults to today-or-later enquiries while preserving order disclaimers', () => {
+    assert.ok(hasText(bookedTree, 'Owner A Record')); assert.ok(!hasText(bookedTree, 'Past inquiry'));
+    assert.ok(hasText(bookedTree, '这里是本机保存的问询记录，不代表订单已确认或已支付。'));
+  });
+  nodes(bookedTree).find(node => node.type === 'View' && node.props.children.includes('全部')).props.onClick();
+  bookedTree = bookedRenderer.render();
+  check('all enquiry filter includes past local records', () => assert.ok(hasText(bookedTree, 'Past inquiry')));
+  taro.showModal = async () => ({ confirm: true });
+  action(bookedTree, '联系主理人').props.onClick(); await flushCallbacks();
+  check('local inquiry contact carries the true content kind and ID into chat', () => assert.ok(
+    navigations.at(-1).includes('&service=managed-service')));
+  const activityWrite = taro.setStorageSync;
+  taro.setStorageSync = (key, value) => { if (key === bookedKey) throw new Error('Local write failed'); return activityWrite(key, value); };
+  action(bookedTree, '标记取消').props.onClick(); await flushCallbacks();
+  check('failed local cancellation preserves storage and offers retry', () => {
+    assert.equal(storage.get(bookedKey)[0].status, 'inquiry'); assert.equal(toasts.at(-1), 'Local write failed');
+    assert.ok(action(bookedRenderer.render(), '标记取消'));
+  });
+  taro.setStorageSync = activityWrite;
+  action(bookedRenderer.render(), '标记取消').props.onClick(); await flushCallbacks();
+  check('confirmed local cancellation changes only the local record', () => {
+    assert.equal(storage.get(bookedKey)[0].status, 'cancelled');
+    assert.ok(hasText(bookedRenderer.render(), '已标记取消'));
+  });
+  bookedRenderer.unmount();
+  routerParams = { type: 'viewed' };
+  const activityRead = taro.getStorageSync;
+  taro.getStorageSync = key => { if (key === viewedKey) throw new Error('Local read failed'); return activityRead(key); };
+  const readFailureRenderer = createRenderer(ActivityPage);
+  readFailureRenderer.render();
+  let readFailureTree = readFailureRenderer.render();
+  check('activity storage failures render a recoverable error rather than false empty history', () => {
+    assert.ok(nodes(readFailureTree).some(node => node.type?.name === 'StateView' && node.props.error === 'Local read failed' && node.props.onRetry));
+  });
+  taro.getStorageSync = activityRead;
+  nodes(readFailureTree).find(node => node.type?.name === 'StateView').props.onRetry();
+  check('retry restores activity history after local storage recovers', () => assert.ok(hasText(readFailureRenderer.render(), 'Owner A Record')));
+  readFailureRenderer.unmount();
+  const usePageOperation = load('src/hooks/usePageOperation.ts').usePageOperation;
+  const operationRenderer = createRenderer(() => usePageOperation('management-probe'));
+  let operationProbe = operationRenderer.render();
+  const firstOperation = operationProbe.begin();
+  check('page operation locks synchronously and blocks idle navigation', () => {
+    assert.ok(firstOperation); assert.equal(operationProbe.begin(), null); assert.equal(operationProbe.idle(), false);
+  });
+  operationProbe.cancel();
+  const replacementOperation = operationProbe.begin();
+  operationProbe.finish(firstOperation);
+  check('an old finally cannot release a replacement page operation', () => {
+    assert.ok(operationProbe.isCurrent(replacementOperation)); assert.equal(operationProbe.begin(), null);
+  });
+  const rotationSession = session.getSession();
+  session.refreshSession('management-rotation', 'rotated-refresh', rotationSession.token, session.getSessionGeneration());
+  operationProbe = operationRenderer.render();
+  check('token rotation preserves the current page operation generation', () => assert.ok(operationProbe.isCurrent(replacementOperation)));
+  operationRenderer.unmount();
+  check('unmount invalidates previously retained page operation callbacks', () => {
+    assert.equal(operationProbe.isCurrent(replacementOperation), false); assert.equal(operationProbe.begin(), null);
+  });
+  requestHandler = managedHandler;
+  const ownActiveOnly = await api.getOwnItems('service');
+  const ownIncludingCancelled = await api.getOwnItems('service', true);
+  check('own-item loading remains active-only by default for existing callers', () => assert.deepEqual(
+    ownActiveOnly.map(item => item.id), [ownService.id]));
+  check('management opt-in returns both live and cancelled owned records', () => assert.deepEqual(
+    ownIncludingCancelled.map(item => item.id), [ownService.id, cancelledService.id]));
+  storage.set(viewedKey, [historyRecord]);
+  const hiddenActivityRenderer = createRenderer(ActivityPage);
+  hiddenActivityRenderer.render();
+  const hiddenModal = deferred();
+  taro.showModal = () => hiddenModal.promise;
+  action(hiddenActivityRenderer.render(), '清空').props.onClick();
+  hiddenActivityRenderer.hide();
+  hiddenModal.resolve({ confirm: true }); await flushCallbacks();
+  check('hiding an activity page invalidates an open clear confirmation', () => assert.equal(storage.get(viewedKey).length, 1));
+  hiddenActivityRenderer.unmount();
+  requestHandler = async options => options.method === 'DELETE'
+    ? response({ ...ownService, id: 'wrong-ack', is_deleted: true }) : managedHandler(options);
+  taro.showModal = async () => ({ confirm: true });
+  routerParams = {};
+  const invalidAckRenderer = createRenderer(PublishedPage);
+  invalidAckRenderer.render(); await flushCallbacks();
+  action(invalidAckRenderer.render(), '取消发布').props.onClick(); await flushCallbacks();
+  check('an acknowledgement for another listing cannot mark the selected listing cancelled', () => {
+    assert.ok(action(invalidAckRenderer.render(), '取消发布')); assert.equal(toasts.at(-1), '下架结果未确认，请刷新后检查');
+  });
+  invalidAckRenderer.unmount();
+  storage.set(viewedKey, { corrupt: true });
+  check('malformed activity records are not silently overwritten', () => {
+    assert.throws(() => activityStore.getActivity('viewed'), /格式异常/);
+    assert.deepEqual(storage.get(viewedKey), { corrupt: true });
+  });
+  storage.delete(viewedKey); storage.delete(otherViewedKey); storage.delete(bookedKey);
+  taro.showModal = originalModal;
   routerParams = {};
   console.log(`PASS: ${checks.length} miniapp regression checks; no real API or account data used`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

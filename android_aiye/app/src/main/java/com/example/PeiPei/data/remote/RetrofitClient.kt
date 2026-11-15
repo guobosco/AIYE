@@ -142,6 +142,12 @@ object RetrofitClient {
         .callTimeout(15, TimeUnit.SECONDS)
         .build()
 
+    private fun sessionId(token: String?): String? = runCatching {
+        val payload = token?.split(".")?.getOrNull(1) ?: return@runCatching null
+        org.json.JSONObject(String(android.util.Base64.decode(payload, android.util.Base64.URL_SAFE), Charsets.UTF_8))
+            .optString("sid").takeIf { it.isNotBlank() }
+    }.getOrNull()
+
     private val authInterceptor = Interceptor { chain ->
         val token = AuthSession.getAccessToken()
         val request: Request = if (token.isNullOrEmpty()) {
@@ -158,7 +164,10 @@ object RetrofitClient {
         } else {
             val refreshed = synchronized(AuthSession) {
                 val current = AuthSession.getAccessToken()
-                if (current != token) current else {
+                if (current != token) {
+                    // Rotation may reuse the request; a different login must never do so.
+                    current.takeIf { sessionId(token) != null && sessionId(it) == sessionId(token) }
+                } else {
                     val refresh = AuthSession.getRefreshToken()
                     if (refresh.isNullOrBlank()) {
                         AuthSession.updateAccessToken(null)

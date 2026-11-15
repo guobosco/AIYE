@@ -56,6 +56,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,6 +83,34 @@ import java.time.Instant
 import java.time.ZoneId
 import java.util.Calendar
 import java.util.Locale
+import kotlinx.coroutines.launch
+
+@Composable
+internal fun CalendarLoadGate(serviceId: String?): Boolean {
+    var ready by remember(serviceId) { mutableStateOf(serviceId.isNullOrBlank()) }
+    var error by remember(serviceId) { mutableStateOf<String?>(null) }
+    var attempt by remember(serviceId) { mutableStateOf(0) }
+    LaunchedEffect(serviceId, attempt) {
+        if (serviceId.isNullOrBlank()) return@LaunchedEffect
+        ready = false
+        error = null
+        try {
+            AppDataStore.refreshHostCalendar(serviceId)
+            ready = true
+        } catch (failure: Exception) { error = failure.message ?: "日历加载失败" }
+    }
+    if (!ready) {
+        Text(error ?: "正在读取可订日历…", color = Color(0xFF777777))
+        if (error != null) TextButton(onClick = { attempt++ }) { Text("重试") }
+    }
+    return ready
+}
+
+internal fun calendarAllowsStart(serviceId: String, millis: Long): Boolean {
+    val date = Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault())
+    val closure = AppDataStore.hostCalendarDayClosures.value[serviceId]?.get(date.toLocalDate().toString())
+    return bookingStartMinuteAllowedForDayClosure(date.hour * 60 + date.minute, closure) && millis > System.currentTimeMillis()
+}
 
 data class ServiceContentPickOption(
     val id: String,
@@ -569,6 +598,7 @@ private fun ServiceDetailSchedulePickerSheetContent(
             }
         }
         Spacer(modifier = Modifier.height(4.dp))
+        val calendarReady = CalendarLoadGate(hostCalendarServiceId)
         DatePicker(
             state = datePickerState,
             modifier = Modifier
@@ -645,7 +675,7 @@ private fun ServiceDetailSchedulePickerSheetContent(
                         onConfirm(mergeDateAndMinutesSchedule(dayMillis, pm))
                     }
                 },
-                enabled = dayMillis != null && pm != null,
+                enabled = calendarReady && dayMillis != null && pm != null && pm in filteredStartMinutes,
             ) {
                 Text("确定", fontWeight = FontWeight.SemiBold)
             }
@@ -739,15 +769,15 @@ fun ServiceDetailBookingPolicySections(
             if (!extraFeeDescription.isNullOrBlank()) {
                 ServiceDetailSectionHeader("额外费用说明")
                 ServiceDetailInfoCard(text = extraFeeDescription)
-            } else {
-                ServiceDetailSectionHeader("时间选择")
-                ServiceDetailChevronRow(
-                    icon = Icons.Outlined.DateRange,
-                    title = "期望开始时间",
-                    subtitle = scheduleMillis?.let(::formatScheduleSlotDisplay) ?: "请选择日期与时间",
-                    onClick = { showScheduleSheet = true },
-                )
+                Spacer(modifier = Modifier.height(SectionBlockVerticalGap))
             }
+            ServiceDetailSectionHeader("时间选择")
+            ServiceDetailChevronRow(
+                icon = Icons.Outlined.DateRange,
+                title = "期望开始时间",
+                subtitle = scheduleMillis?.let(::formatScheduleSlotDisplay) ?: "请选择日期与时间",
+                onClick = { showScheduleSheet = true },
+            )
             Spacer(modifier = Modifier.height(SectionBlockVerticalGap))
             HorizontalDivider(
                 modifier = Modifier.fillMaxWidth(),
@@ -1033,6 +1063,9 @@ fun ServiceBookingSelectionSheet(
     onDismiss: () -> Unit,
     onConfirmBooking: () -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
+    var confirming by remember { mutableStateOf(false) }
+    var calendarError by remember { mutableStateOf<String?>(null) }
     var showContentSheet by remember { mutableStateOf(false) }
     var showScheduleSheet by remember { mutableStateOf(false) }
     val rootSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -1098,21 +1131,40 @@ fun ServiceBookingSelectionSheet(
             if (!extraFeeDescription.isNullOrBlank()) {
                 ServiceDetailSectionHeader("额外费用说明")
                 ServiceDetailInfoCard(text = extraFeeDescription)
-            } else {
-                ServiceDetailChevronRow(
-                    icon = Icons.Outlined.DateRange,
-                    title = "时间选择",
-                    subtitle = scheduleMillis?.let(::formatScheduleSlotDisplay) ?: "请选择日期与时间",
-                    onClick = { showScheduleSheet = true },
-                    verticalPadding = BookingPolicyRowVerticalPadding,
-                )
+                Spacer(modifier = Modifier.height(16.dp))
             }
+            ServiceDetailChevronRow(
+                icon = Icons.Outlined.DateRange,
+                title = "时间选择",
+                subtitle = scheduleMillis?.let(::formatScheduleSlotDisplay) ?: "请选择日期与时间",
+                onClick = { showScheduleSheet = true },
+                verticalPadding = BookingPolicyRowVerticalPadding,
+            )
             Spacer(modifier = Modifier.height(20.dp))
+            calendarError?.let { Text(it, color = Color(0xFFB3261E)) }
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(26.dp))
-                    .clickable(onClick = onConfirmBooking),
+                    .clickable(enabled = !confirming) {
+                        if (scheduleHostCalendarServiceId.isNullOrBlank()) {
+                            onConfirmBooking()
+                        } else {
+                            val millis = scheduleMillis
+                            if (millis == null) { calendarError = "请选择日期与时间" }
+                            else {
+                                confirming = true
+                                scope.launch {
+                                    try {
+                                        AppDataStore.refreshHostCalendar(scheduleHostCalendarServiceId)
+                                        check(calendarAllowsStart(scheduleHostCalendarServiceId, millis)) { "该时间已不可订，请重新选择" }
+                                        onConfirmBooking()
+                                    } catch (error: Exception) { calendarError = error.message ?: "日历校验失败，请重试" }
+                                    finally { confirming = false }
+                                }
+                            }
+                        }
+                    },
                 shape = RoundedCornerShape(26.dp),
                 color = Color(0xFF111111),
             ) {

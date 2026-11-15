@@ -142,6 +142,16 @@ fun PublishedServiceCalendarScreen(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    var calendarReady by remember(serviceId) { mutableStateOf(false) }
+    var savingCalendar by remember { mutableStateOf(false) }
+    LaunchedEffect(serviceId) {
+        try {
+            AppDataStore.refreshHostCalendar(serviceId)
+            calendarReady = true
+        } catch (e: Exception) {
+            snackbarHostState.showSnackbar("日历加载失败，点击确定可重新加载")
+        }
+    }
     var selectedDate by rememberSaveable { mutableStateOf<String?>(null) }
     var showDayBookSheet by remember { mutableStateOf(false) }
     var sheetMode by remember { mutableIntStateOf(CalendarDayBookSheetMode.OPEN.ordinal) }
@@ -385,18 +395,11 @@ fun PublishedServiceCalendarScreen(
                     TextButton(onClick = { showDayBookSheet = false }) { Text("取消") }
                     Spacer(modifier = Modifier.width(8.dp))
                     TextButton(
+                        enabled = !savingCalendar,
                         onClick = {
-                            when (sheetMode) {
-                                CalendarDayBookSheetMode.OPEN.ordinal -> {
-                                    AppDataStore.setHostCalendarDayClosure(serviceId, iso, null)
-                                }
-                                CalendarDayBookSheetMode.ALL_DAY.ordinal -> {
-                                    AppDataStore.setHostCalendarDayClosure(
-                                        serviceId,
-                                        iso,
-                                        HostCalendarDayClosure(allDay = true),
-                                    )
-                                }
+                            val closure = when (sheetMode) {
+                                CalendarDayBookSheetMode.OPEN.ordinal -> null
+                                CalendarDayBookSheetMode.ALL_DAY.ordinal -> HostCalendarDayClosure(allDay = true)
                                 else -> {
                                     val sm = BookingTimeRangesCodec.parseMinutes(sheetWindowStart)
                                     val em = BookingTimeRangesCodec.parseMinutes(sheetWindowEnd)
@@ -406,18 +409,30 @@ fun PublishedServiceCalendarScreen(
                                         }
                                         return@TextButton
                                     }
-                                    AppDataStore.setHostCalendarDayClosure(
-                                        serviceId,
-                                        iso,
-                                        HostCalendarDayClosure(
+                                    HostCalendarDayClosure(
                                             allDay = false,
                                             windowStart = sheetWindowStart,
                                             windowEnd = sheetWindowEnd,
-                                        ),
-                                    )
+                                        )
                                 }
                             }
-                            showDayBookSheet = false
+                            savingCalendar = true
+                            scope.launch {
+                                try {
+                                    if (!calendarReady) {
+                                        AppDataStore.refreshHostCalendar(serviceId)
+                                        calendarReady = true
+                                        snackbarHostState.showSnackbar("日历已加载，请核对后再次保存")
+                                    } else {
+                                        AppDataStore.saveHostCalendarDay(serviceId, iso, closure)
+                                        showDayBookSheet = false
+                                        snackbarHostState.showSnackbar("已同步日历")
+                                    }
+                                } catch (e: Exception) {
+                                    calendarReady = false
+                                    snackbarHostState.showSnackbar("保存失败或日历已变更，请重新加载后保存")
+                                } finally { savingCalendar = false }
+                            }
                         },
                     ) {
                         Text("确定", fontWeight = FontWeight.SemiBold)

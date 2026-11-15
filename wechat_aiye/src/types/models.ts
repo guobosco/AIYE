@@ -52,6 +52,7 @@ export interface Service extends CatalogItem {
   service_extra_fee_tags: string[];
 }
 export interface Experience extends CatalogItem {
+  is_draft?: boolean;
   host_id: string;
   host_name: string;
   duration_text: string;
@@ -167,4 +168,9 @@ export interface CalendarClosure {
   allDay: boolean;
   start: string;
   end: string;
+  version?: number;
+  active?: boolean;
+}
+export interface CalendarResponse {
+  days: Record<string, CalendarClosure>;
 }

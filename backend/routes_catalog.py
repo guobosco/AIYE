@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from typing import List, Optional
 import time
+from datetime import date
+from sqlalchemy.exc import IntegrityError
 try:
     from . import core
     from .errors import commit_and_refresh
@@ -50,6 +52,7 @@ def update_service(
         if key in {"id", "creator_id", "created_at", "sort_priority"}:
             continue
         setattr(db_item, key, value)
+    db_item.record_hidden = False
     core.apply_owner_service_review_state(db_item)
     db_item.updated_at = int(time.time() * 1000)
 
@@ -66,7 +69,9 @@ def read_services(
     current_user: models.User = Depends(core.get_current_user)
 ):
     owner_id = core.ensure_optional_self_access(current_user, user_id)
-    query = db.query(models.Service).filter(models.Service.creator_id == owner_id)
+    query = db.query(models.Service).filter(
+        models.Service.creator_id == owner_id, models.Service.record_hidden == False
+    )
     return query.order_by(desc(models.Service.updated_at), desc(models.Service.created_at)).offset(skip).limit(limit).all()
 
 
@@ -135,6 +140,77 @@ def delete_service(
     return db_item
 
 
+@router.delete("/services/{service_id}/record")
+def hide_service_record(service_id: str, db: Session = Depends(core.get_db),
+                        current_user: models.User = Depends(core.get_current_user)):
+    item = db.get(models.Service, service_id)
+    if item is None:
+        raise HTTPException(404, "Service not found")
+    core.ensure_record_owner(item, current_user, "creator_id")
+    if not item.is_deleted and not item.is_draft:
+        raise HTTPException(409, "Cancel publication before hiding its record")
+    item.record_hidden = True
+    db.commit()
+    return {"hidden": True}
+
+
+@router.get("/services/{service_id}/calendar", response_model=schemas.CalendarResponse)
+def read_calendar(service_id: str, db: Session = Depends(core.get_db),
+                  current_user: Optional[models.User] = Depends(core.get_optional_current_user)):
+    item = db.get(models.Service, service_id)
+    if item is None or not core.can_view_service(item, current_user):
+        raise HTTPException(404, "Service not found")
+    rows = db.query(models.CalendarClosure).filter_by(service_id=service_id).all()
+    return {"days": {row.day: {
+        "allDay": row.all_day, "start": row.start, "end": row.end,
+        "version": row.version, "active": row.active,
+    } for row in rows}}
+
+
+@router.put("/services/{service_id}/calendar/{day}", response_model=schemas.CalendarDay)
+def save_calendar_day(service_id: str, day: str, payload: schemas.CalendarDay,
+                      db: Session = Depends(core.get_db),
+                      current_user: models.User = Depends(core.get_current_user)):
+    try:
+        if date.fromisoformat(day).isoformat() != day:
+            raise ValueError()
+    except ValueError:
+        raise HTTPException(422, "Use an ISO calendar date")
+    item = db.get(models.Service, service_id)
+    if item is None:
+        raise HTTPException(404, "Service not found")
+    core.ensure_record_owner(item, current_user, "creator_id")
+    key = f"{service_id}:{day}"
+    row = db.get(models.CalendarClosure, key)
+    if row is None:
+        if payload.version != 0:
+            raise HTTPException(409, "Calendar changed; reload before saving")
+        row = models.CalendarClosure(
+            id=key, service_id=service_id, day=day, all_day=payload.allDay,
+            start=payload.start, end=payload.end, active=payload.active, version=1,
+        )
+        db.add(row)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(409, "Calendar changed; reload before saving")
+    else:
+        changed = db.query(models.CalendarClosure).filter_by(
+            id=key, version=payload.version
+        ).update({
+            "all_day": payload.allDay, "start": payload.start, "end": payload.end,
+            "active": payload.active, "version": payload.version + 1,
+        }, synchronize_session=False)
+        if not changed:
+            db.rollback()
+            raise HTTPException(409, "Calendar changed; reload before saving")
+        db.commit()
+        db.refresh(row)
+    return {"allDay": row.all_day, "start": row.start, "end": row.end,
+            "active": row.active, "version": row.version}
+
+
 @router.post("/experiences/", response_model=schemas.Experience)
 def create_experience(
     experience: schemas.ExperienceCreate,
@@ -158,8 +234,7 @@ def update_experience(
     current_user: models.User = Depends(core.get_current_user)
 ):
     db_item = db.query(models.Experience).filter(
-        models.Experience.id == experience_id,
-        models.Experience.is_deleted == False
+        models.Experience.id == experience_id
     ).first()
     if db_item is None:
         raise HTTPException(status_code=404, detail="Experience not found")
@@ -170,6 +245,7 @@ def update_experience(
         if key in {"id", "host_id", "created_at"}:
             continue
         setattr(db_item, key, value)
+    db_item.record_hidden = False
     db_item.average_rating = compute_experience_rating_for_host(db, experience.host_id)
     core.apply_owner_experience_review_state(db_item)
     db_item.updated_at = int(time.time() * 1000)
@@ -187,7 +263,7 @@ def read_experiences(
     current_user: models.User = Depends(core.get_current_user)
 ):
     owner_id = core.ensure_optional_self_access(current_user, user_id)
-    query = db.query(models.Experience).filter(models.Experience.is_deleted == False)
+    query = db.query(models.Experience).filter(models.Experience.record_hidden == False)
     if owner_id:
         query = query.filter(models.Experience.host_id == owner_id)
     return query.order_by(desc(models.Experience.updated_at), desc(models.Experience.created_at)).offset(skip).limit(limit).all()
@@ -202,6 +278,7 @@ def list_square_discovery_experiences(
 ):
     query = db.query(models.Experience).filter(
         models.Experience.is_deleted == False,
+        models.Experience.is_draft == False,
         models.Experience.review_status == "approved",
     )
     if updated_after is not None:
@@ -245,3 +322,17 @@ def delete_experience(
     db_item.updated_at = int(time.time() * 1000)
     commit_and_refresh(db, db_item)
     return db_item
+
+
+@router.delete("/experiences/{experience_id}/record")
+def hide_experience_record(experience_id: str, db: Session = Depends(core.get_db),
+                           current_user: models.User = Depends(core.get_current_user)):
+    item = db.get(models.Experience, experience_id)
+    if item is None:
+        raise HTTPException(404, "Experience not found")
+    core.ensure_record_owner(item, current_user, "host_id")
+    if not item.is_deleted and not item.is_draft:
+        raise HTTPException(409, "Cancel publication before hiding its record")
+    item.record_hidden = True
+    db.commit()
+    return {"hidden": True}
