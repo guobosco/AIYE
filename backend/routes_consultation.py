@@ -68,6 +68,8 @@ def change_inquiry(item_id: str, payload: schemas.InquiryUpdate,
         raise HTTPException(404, "Inquiry not found")
     if payload.status == "replied" and user.id != item.host_id:
         raise HTTPException(403, "Only the host can mark an inquiry replied")
+    if item.version != payload.version:
+        raise HTTPException(409, "Inquiry changed; refresh before retrying")
     if item.status == "closed":
         if payload.status == "closed":
             return item
@@ -141,9 +143,12 @@ def register_push(registration_id: str, payload: schemas.PushRegistrationRequest
 
 
 @router.get("/me/blocks")
-def blocks(db: Session = Depends(core.get_db), user=Depends(core.get_current_user)):
+def blocks(skip: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=200),
+           db: Session = Depends(core.get_db), user=Depends(core.get_current_user)):
     return [{"peer_id": item.peer_id, "created_at": item.created_at}
-            for item in db.query(models.UserBlock).filter_by(user_id=user.id).all()]
+            for item in db.query(models.UserBlock).filter_by(user_id=user.id).order_by(
+                desc(models.UserBlock.created_at), desc(models.UserBlock.peer_id)
+            ).offset(skip).limit(limit).all()]
 
 
 @router.put("/me/blocks/{peer_id}")
@@ -197,13 +202,14 @@ def report(payload: schemas.ReportRequest, db: Session = Depends(core.get_db),
 
 
 @router.get("/auth/sessions")
-def sessions(token: str = Depends(core.oauth2_scheme), db: Session = Depends(core.get_db)):
+def sessions(skip: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=200),
+             token: str = Depends(core.oauth2_scheme), db: Session = Depends(core.get_db)):
     current, user = accounts.resolve_session(db, token)
     return [{"id": item.id, "created_at": item.created_at, "expires_at": item.expires_at,
              "is_current": item.id == current.id} for item in db.query(models.AuthSession).filter(
         models.AuthSession.user_id == user.id, models.AuthSession.revoked_at == 0,
         models.AuthSession.expires_at > core.current_millis(),
-    ).order_by(desc(models.AuthSession.created_at)).all()]
+    ).order_by(desc(models.AuthSession.created_at), desc(models.AuthSession.id)).offset(skip).limit(limit).all()]
 
 
 @router.delete("/auth/sessions/{session_id}")

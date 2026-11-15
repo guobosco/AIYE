@@ -318,11 +318,11 @@ interface ApiService {
     @POST("me/notices/{id}/read")
     suspend fun readNotice(@Path("id") id: String): Map<String, Boolean>
     @GET("auth/sessions")
-    suspend fun getLoginSessions(): List<LoginSession>
+    suspend fun getLoginSessions(@Query("skip") skip: Int = 0, @Query("limit") limit: Int = 100): List<LoginSession>
     @DELETE("auth/sessions/{id}")
     suspend fun revokeLoginSession(@Path("id") id: String): Map<String, Boolean>
     @GET("me/blocks")
-    suspend fun getBlockedAccounts(): List<BlockedAccount>
+    suspend fun getBlockedAccounts(@Query("skip") skip: Int = 0, @Query("limit") limit: Int = 100): List<BlockedAccount>
     @PUT("me/blocks/{id}")
     suspend fun blockAccount(@Path("id") id: String): Map<String, Boolean>
     @DELETE("me/blocks/{id}")

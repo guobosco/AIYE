@@ -13,8 +13,8 @@ export interface Reminders { enabled: boolean; remote_push_enabled: boolean }
 export interface SearchItem { id: string; kind: 'service' | 'experience'; title: string; location: string; host_id: string }
 export const getInquiries = (skip = 0) => request<Inquiry[]>(`/me/inquiries?skip=${skip}&limit=100`);
 export const getNotices = (skip = 0) => request<Notice[]>(`/me/notices?skip=${skip}&limit=100`);
-export const getSessions = () => request<LoginSession[]>('/auth/sessions');
-export const getBlocks = () => request<Block[]>('/me/blocks');
+export const getSessions = (skip = 0) => request<LoginSession[]>(`/auth/sessions?skip=${skip}&limit=100`);
+export const getBlocks = (skip = 0) => request<Block[]>(`/me/blocks?skip=${skip}&limit=100`);
 export const getReminders = () => request<Reminders>('/me/reminders');
 export const mutation = <T = { success?: boolean; closed?: boolean }>(
   path: string, method: 'POST' | 'PUT' | 'DELETE' = 'POST', value?: object,

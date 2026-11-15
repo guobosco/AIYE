@@ -1,13 +1,79 @@
 """Shared consultation rules; writes participate in the caller's transaction."""
 import uuid
 import re
-from datetime import date
+import json
+from datetime import datetime, timedelta, timezone
 from fastapi import HTTPException
 from sqlalchemy import or_, and_
 try:
     from . import models
 except ImportError:
     import models
+
+
+# The current catalog uses China-local wall times in all three clients.
+BOOKING_TIMEZONE = timezone(timedelta(hours=8))
+
+
+def booking_now():
+    return datetime.now(BOOKING_TIMEZONE)
+
+
+def clock_minutes(value, allow_day_end=False):
+    if not isinstance(value, str) or not re.fullmatch(r"\d{2}:\d{2}", value):
+        return None
+    if allow_day_end and value == "24:00":
+        return 1440
+    hour, minute = map(int, value.split(":"))
+    return hour * 60 + minute if hour <= 23 and minute <= 59 else None
+
+
+def normalize_inquiry_date(raw, service=None):
+    if not raw:
+        return ""
+    match = re.fullmatch(
+        r"(\d{4})-(\d{2})-(\d{2})(?: (\d{2}:\d{2}))?"
+        r"|(\d{4})年(\d{1,2})月(\d{1,2})日(?: (\d{2}:\d{2}))?", raw,
+    )
+    if not match:
+        raise HTTPException(422, "Invalid inquiry date")
+    year, month, day, clock = match.groups()[:4] if match.group(1) else match.groups()[4:]
+    minute = clock_minutes(clock) if clock else 0
+    if minute is None:
+        raise HTTPException(422, "Invalid inquiry time")
+    try:
+        selected = datetime(int(year), int(month), int(day), minute // 60, minute % 60,
+                            tzinfo=BOOKING_TIMEZONE)
+    except ValueError:
+        raise HTTPException(422, "Invalid inquiry date")
+    if service is not None:
+        if not clock:
+            raise HTTPException(422, "Choose a time for the service inquiry")
+        now = booking_now()
+        lead = max(0.0, min(float(service.booking_lead_hours or 0), 168.0))
+        days = service.booking_future_open_days or 30
+        days = 30 if days < 7 else min(days, 180)
+        if selected < now + timedelta(hours=lead):
+            raise HTTPException(409, "This time is too soon; choose a later time")
+        if not 0 <= (selected.date() - now.date()).days < days:
+            raise HTTPException(409, "This date is outside the open booking window")
+        raw_ranges = (service.booking_time_ranges_json or "").strip()
+        try:
+            ranges = json.loads(raw_ranges) if raw_ranges else []
+            if not isinstance(ranges, list):
+                raise ValueError()
+            parsed = []
+            for row in ranges:
+                start = clock_minutes(row.get("start")) if isinstance(row, dict) else None
+                end = clock_minutes(row.get("end"), allow_day_end=True) if isinstance(row, dict) else None
+                if start is None or end is None or start >= end:
+                    raise ValueError()
+                parsed.append((start, end))
+        except (ValueError, TypeError):
+            raise HTTPException(409, "The host must update the service time rules")
+        if parsed and not any(start <= minute < end for start, end in parsed):
+            raise HTTPException(409, "This time is outside the service hours")
+    return selected.strftime("%Y-%m-%d") + (f" {clock}" if clock else "")
 
 
 def ensure_ready(user):
@@ -65,33 +131,14 @@ def capture_inquiry(db, user, conversation, message):
     if host_id == user.id or host_id not in (conversation.participant_ids or []):
         raise HTTPException(403, "Inquiry must be sent to the item's host")
     ensure_contact_allowed(db, user.id, host_id)
-    # Clients retain localized display dates; normalize the calendar portion.
     raw_day = str(extra.get("inquiry_date") or "").strip()
-    if raw_day:
-        match = re.match(r"^(\d{4})[-年](\d{1,2})[-月](\d{1,2})(?:日)?(?:$|\s)", raw_day)
-        if not match:
-            raise HTTPException(422, "Invalid inquiry date")
-        try:
-            day = date(*map(int, match.groups())).isoformat()
-        except ValueError:
-            raise HTTPException(422, "Invalid inquiry date")
-        clock_match = re.search(r"\s(\d{2}:\d{2})$", raw_day)
-        clock = clock_match.group(1) if clock_match else ""
-        if clock:
-            hour, minute = map(int, clock.split(":"))
-            if hour > 23 or minute > 59:
-                raise HTTPException(422, "Invalid inquiry time")
-        if kind == "service":
-            closure = db.get(models.CalendarClosure, f"{item.id}:{day}")
-            if closure and closure.active and closure.all_day:
-                raise HTTPException(409, "This date is closed; choose another date")
-            if clock:
-                if closure and closure.active and closure.start <= clock < closure.end:
-                    raise HTTPException(409, "This time is closed; choose another time")
-        if clock:
-            day = f"{day} {clock}"
-    else:
-        day = ""
+    day = normalize_inquiry_date(raw_day, item if kind == "service" else None)
+    if day and kind == "service":
+        closure = db.get(models.CalendarClosure, f"{item.id}:{day[:10]}")
+        if closure and closure.active and closure.all_day:
+            raise HTTPException(409, "This date is closed; choose another date")
+        if closure and closure.active and closure.start <= day[11:] < closure.end:
+            raise HTTPException(409, "This time is closed; choose another time")
     try:
         guests = int(extra.get("guest_count") or 1)
         if guests < 1 or guests > 1000:

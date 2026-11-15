@@ -1,14 +1,23 @@
 """Consultation contracts on the account suite's isolated temporary database."""
 import unittest
 import uuid
+from datetime import datetime
+from unittest.mock import patch
 from . import test_account_security as suite
-from . import core, models, account_security as accounts
+from . import core, models, account_security as accounts, consultation_service
 
 
 class ConsultationTests(unittest.TestCase):
-    setUp = suite.AccountSecurityTests.setUp
     send = suite.AccountSecurityTests.send
     login = suite.AccountSecurityTests.login
+
+    def setUp(self):
+        suite.AccountSecurityTests.setUp(self)
+        clock = patch.object(consultation_service, "booking_now", return_value=datetime(
+            2026, 11, 15, 10, 0, tzinfo=consultation_service.BOOKING_TIMEZONE,
+        ))
+        clock.start()
+        self.addCleanup(clock.stop)
 
     @classmethod
     def setUpClass(cls):
@@ -89,7 +98,85 @@ class ConsultationTests(unittest.TestCase):
         self.assertEqual(self.client.put(path, headers=hh, json={"status": "replied", "version": 1}).json()["version"], 2)
         self.assertEqual(self.client.put(path, headers=gh, json={"status": "closed", "version": 1}).status_code, 409)
         self.assertEqual(self.client.put(path, headers=gh, json={"status": "closed", "version": 2}).json()["status"], "closed")
+        self.assertEqual(self.client.put(path, headers=gh, json={"status": "closed", "version": 2}).status_code, 409)
+        repeated = self.client.put(path, headers=gh, json={"status": "closed", "version": 3})
+        self.assertEqual(repeated.status_code, 200)
+        self.assertEqual(repeated.json()["version"], 3)
         self.assertEqual(self.client.put(path, headers=hh, json={"status": "replied", "version": 3}).status_code, 409)
+
+    def test_service_time_rules_reject_bypass_and_keep_message_atomic(self):
+        host, hh, guest, gh, item, conversation, body = self.context()
+        with core.SessionLocal() as db:
+            service = db.get(models.Service, item)
+            service.booking_lead_hours = 2.5
+            service.booking_future_open_days = 7
+            service.booking_time_ranges_json = '[{"start":"09:00","end":"13:00"},{"start":"18:00","end":"24:00"}]'
+            db.commit()
+        path = f"/chat/conversations/{conversation}/messages"
+        for day, status in [
+            ("2026-11-15 12:29", 409), ("2026-11-14 18:00", 409),
+            ("2026-11-22 09:00", 409), ("2026-11-16 13:00", 409),
+            ("2026-11-16 08:59", 409), ("2026-11-16", 422),
+            ("2026-11-16 24:00", 422), ("2026-11-16 18:99", 422),
+            ("2026-11-16 garbage", 422), ("2026-11-16 18:00 extra", 422),
+        ]:
+            with self.subTest(day=day):
+                payload = {**body, "extra": {**body["extra"], "inquiry_date": day}}
+                result = self.client.post(path, headers=gh, json=payload)
+                self.assertEqual(result.status_code, status, result.text)
+        with core.SessionLocal() as db:
+            self.assertEqual(db.query(models.ChatMessage).filter_by(conversation_id=conversation).count(), 0)
+            self.assertEqual(db.query(models.Inquiry).filter_by(conversation_id=conversation).count(), 0)
+            self.assertEqual(db.query(models.ConversationMember).filter_by(
+                conversation_id=conversation, user_id=host["user"]["id"]).one().unread_count, 0)
+        for day in ["2026-11-15 12:30", "2026-11-21 23:30", "2026年11月16日 18:00"]:
+            payload = {**body, "client_message_id": uuid.uuid4().hex,
+                       "extra": {**body["extra"], "inquiry_date": day}}
+            result = self.client.post(path, headers=gh, json=payload)
+            self.assertEqual(result.status_code, 200, result.text)
+
+    def test_bad_host_time_rules_fail_closed_but_undated_consultation_remains_allowed(self):
+        host, hh, guest, gh, item, conversation, body = self.context()
+        path = f"/chat/conversations/{conversation}/messages"
+        for raw in ['invalid', '{}', '[{"start":"09:00","end":"09:00"}]', '[null]']:
+            with core.SessionLocal() as db:
+                db.get(models.Service, item).booking_time_ranges_json = raw
+                db.commit()
+            result = self.client.post(path, headers=gh, json=body)
+            self.assertEqual(result.status_code, 409, result.text)
+        body["extra"]["inquiry_date"] = ""
+        result = self.client.post(path, headers=gh, json=body)
+        self.assertEqual(result.status_code, 200, result.text)
+        row = next(v for v in self.client.get("/me/inquiries", headers=gh).json() if v["id"] == result.json()["id"])
+        self.assertEqual(row["details"]["inquiry_date"], "")
+
+    def test_private_lists_are_paged_stably_and_owner_scoped(self):
+        auth, headers = self.ready()
+        outsider, oh = self.ready()
+        now = core.current_millis()
+        with core.SessionLocal() as db:
+            for index in range(205):
+                peer = f"paged-peer-{uuid.uuid4().hex}"
+                db.add(models.User(id=peer, name="分页测试"))
+                db.add(models.UserBlock(id=uuid.uuid4().hex, user_id=auth["user"]["id"],
+                                        peer_id=peer, created_at=now))
+                db.add(models.AuthSession(id=uuid.uuid4().hex, user_id=auth["user"]["id"],
+                                          refresh_hash=uuid.uuid4().hex, created_at=now,
+                                          expires_at=now + 3600000, revoked_at=0))
+            db.commit()
+        for path, key, total in [("/auth/sessions", "id", 206), ("/me/blocks", "peer_id", 205)]:
+            with self.subTest(path=path):
+                pages = [self.client.get(path, headers=headers, params={"skip": skip, "limit": 100}).json()
+                         for skip in (0, 100, 200)]
+                ids = [row[key] for page in pages for row in page]
+                self.assertEqual([len(page) for page in pages], [100, 100, total - 200])
+                self.assertEqual(len(set(ids)), total)
+                self.assertEqual(len(self.client.get(path, headers=headers).json()), 100)
+                self.assertEqual(self.client.get(path, headers=headers, params={"limit": 100}).json(), pages[0])
+                self.assertTrue(set(ids).isdisjoint(row[key] for row in self.client.get(path, headers=oh).json()))
+                self.assertEqual(self.client.get(path, headers=headers, params={"skip": -1}).status_code, 422)
+                self.assertEqual(self.client.get(path, headers=headers, params={"limit": 201}).status_code, 422)
+                self.assertEqual(self.client.get(path).status_code, 401)
 
     def test_bidirectional_block_preserves_history_and_filters_catalog(self):
         host, hh, guest, gh, item, conversation, body = self.context()

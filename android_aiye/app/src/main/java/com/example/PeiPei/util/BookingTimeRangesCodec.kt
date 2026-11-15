@@ -110,7 +110,7 @@ object BookingTimeRangesCodec {
         val slots = decode(bookingTimeRangesJson)
         val parsedRanges = slots.mapNotNull { slot ->
             val s = parseMinutes(slot.start) ?: return@mapNotNull null
-            val e = parseMinutes(slot.end) ?: return@mapNotNull null
+            val e = if (slot.end == "24:00") 24 * 60 else parseMinutes(slot.end) ?: return@mapNotNull null
             if (e <= s) return@mapNotNull null
             s to e
         }

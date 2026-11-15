@@ -68,20 +68,23 @@ private fun ConsultationCenterContent(nav: NavController) {
             }
             "提醒" -> {
                 val page = api.getNotices(if (more) notices.size else 0)
+                val preference = api.getReminders()
                 check(AppDataStore.currentUser.value.id == owner) { "账号已切换" }
                 notices = if (more) notices + page else page
-                reminders = api.getReminders()
+                reminders = preference
                 nextPage = page.size == 100
             }
             "会话" -> {
-                val page = api.getLoginSessions()
+                val page = api.getLoginSessions(if (more) sessions.size else 0)
                 check(AppDataStore.currentUser.value.id == owner)
-                sessions = page; nextPage = false
+                sessions = if (more) sessions + page else page
+                nextPage = page.size == 100
             }
             "屏蔽与举报" -> {
-                val page = api.getBlockedAccounts()
+                val page = api.getBlockedAccounts(if (more) blocks.size else 0)
                 check(AppDataStore.currentUser.value.id == owner)
-                blocks = page; nextPage = false
+                blocks = if (more) blocks + page else page
+                nextPage = page.size == 100
             }
             "搜索" -> {
                 val page = api.searchCatalog(kind, query.trim(), city.trim(), category.trim(), if (more) results.size else 0)
@@ -128,7 +131,7 @@ private fun ConsultationCenterContent(nav: NavController) {
         Text("咨询中心", style = MaterialTheme.typography.headlineSmall)
         Text("问询不是订单，不涉及站内支付、库存占位或履约承诺。")
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
-            tabs.forEach { name -> TextButton(enabled = !busy, onClick = { tab = name }) { Text(name) } }
+            tabs.forEach { name -> TextButton(enabled = !busy, onClick = { nextPage = false; error = null; tab = name }) { Text(name) } }
         }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         if (busy) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -148,16 +151,24 @@ private fun ConsultationCenterContent(nav: NavController) {
                 }
                 "问询" -> {
                     TextButton(onClick = { nav.navigate(Screen.MyBookedServices.route) }) { Text("查看历史本机问询（未自动迁移）") }
-                    if (inquiries.isEmpty()) Text("暂无问询")
+                    if (inquiries.isEmpty() && !busy) Text("暂无问询")
                     inquiries.forEach { item ->
                         Text(item.title, style = MaterialTheme.typography.titleMedium)
                         Text("${if (item.userId == user.id) "我发出的" else "收到的"} · ${when (item.status) {
                             "pending" -> "待回复"; "replied" -> "已回复"; else -> "已结束"
                         }}")
-                        if (item.details.isNotEmpty()) Text(item.details.entries.joinToString(" · ") { "${it.key}: ${it.value}" })
+                        val detailText = linkedMapOf(
+                            "inquiry_date" to "意向日期", "guest_count" to "人数", "selected_option" to "方案",
+                            "location" to "地点", "price_text" to "参考价格", "price_basis_text" to "计价方式"
+                        ).mapNotNull { (key, label) ->
+                            val value = item.details[key]
+                            val text = if (key == "guest_count" && value is Number) value.toInt().toString() else value?.toString()
+                            text?.takeIf { it.isNotBlank() }?.let { "$label：$it" }
+                        }.joinToString(" · ")
+                        if (detailText.isNotBlank()) Text(detailText)
                         TextButton(onClick = { nav.navigate(Screen.MessageThread.createRoute(item.conversationId)) }) { Text("打开沟通") }
                         if (item.status != "closed") {
-                            if (item.hostId == user.id) OutlinedButton(enabled = !busy, onClick = {
+                            if (item.hostId == user.id && item.status == "pending") OutlinedButton(enabled = !busy, onClick = {
                                 confirm("标记已回复？这不表示确认订单。") {
                                     api.updateInquiry(item.id, mapOf("status" to "replied", "version" to item.version)); load()
                                 }
@@ -189,12 +200,15 @@ private fun ConsultationCenterContent(nav: NavController) {
                         } }) { Text("查看并标记已读") }
                     }
                 }
-                "会话" -> sessions.forEach { item ->
-                    Text(if (item.isCurrent) "当前登录会话" else "其他登录会话")
-                    Text(java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date(item.createdAt)))
-                    if (!item.isCurrent) TextButton(enabled = !busy, onClick = { confirm("撤销该登录会话？该设备将需要重新登录。") {
-                        api.revokeLoginSession(item.id); load()
-                    } }) { Text("撤销会话") }
+                "会话" -> {
+                    if (sessions.isEmpty() && !busy) Text("暂无登录会话")
+                    sessions.forEach { item ->
+                        Text(if (item.isCurrent) "当前登录会话" else "其他登录会话")
+                        Text(java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.CHINA).format(java.util.Date(item.createdAt)))
+                        if (!item.isCurrent) TextButton(enabled = !busy, onClick = { confirm("撤销该登录会话？该设备将需要重新登录。") {
+                            api.revokeLoginSession(item.id); load()
+                        } }) { Text("撤销会话") }
+                    }
                 }
                 "屏蔽与举报" -> {
                     Text("可从搜索结果选择内容举报或屏蔽主理人；历史聊天不会被删除。")
@@ -217,6 +231,7 @@ private fun ConsultationCenterContent(nav: NavController) {
                     if (reportKind == "user") OutlinedButton(enabled = !busy && peer.isNotBlank(), onClick = {
                         confirm("屏蔽该用户？将阻止双方新的私信。") { api.blockAccount(peer.trim()); load() }
                     }) { Text("屏蔽用户") }
+                    if (blocks.isEmpty() && !busy) Text("暂无屏蔽用户")
                     blocks.forEach { item ->
                         Text(item.peerId)
                         TextButton(enabled = !busy, onClick = { confirm("解除屏蔽？") { api.unblockAccount(item.peerId); load() } }) { Text("解除屏蔽") }

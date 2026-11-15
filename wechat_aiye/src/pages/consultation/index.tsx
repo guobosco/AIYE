@@ -83,11 +83,13 @@ export default function ConsultationPage() {
       if (getSessionGeneration() !== owner || !operation.active()) return;
       setNotices(append ? [...notices, ...page] : page); setReminders(preference); setMore(page.length === 100);
     } else if (tab === 2) {
-      const values = await api.getSessions();
-      if (operation.active()) setSessions(values);
+      const page = await api.getSessions(append ? sessions.length : 0);
+      if (getSessionGeneration() !== owner || !operation.active()) return;
+      setSessions(append ? [...sessions, ...page] : page); setMore(page.length === 100);
     } else if (tab === 3) {
-      const values = await api.getBlocks();
-      if (operation.active()) setBlocks(values);
+      const page = await api.getBlocks(append ? blocks.length : 0);
+      if (getSessionGeneration() !== owner || !operation.active()) return;
+      setBlocks(append ? [...blocks, ...page] : page); setMore(page.length === 100);
     } else if (tab === 5) {
       const page = await api.searchCatalog(kind, query, city, category, append ? results.length : 0);
       if (operation.active()) { setResults(append ? [...results, ...page] : page); setMore(page.length === 30); }
@@ -134,8 +136,8 @@ export default function ConsultationPage() {
         {!inquiries.length && !operation.busy && <StateView empty title="暂无问询" />}
         {inquiries.map(item => <View className={styles.card} key={item.id}>
           <Text className={styles.heading}>{item.title}</Text><Text>{statusText[item.status]}</Text>
-          {Object.entries(item.details).filter(([, value]) => value !== '').map(([key, value]) =>
-            <Text className={styles.muted} key={key}>{detailLabels[key] || key}：{String(value)}</Text>)}
+          {Object.entries(detailLabels).filter(([key]) => item.details[key] != null && item.details[key] !== '').map(([key, label]) =>
+            <Text className={styles.muted} key={key}>{label}：{String(item.details[key])}</Text>)}
           <View className={styles.action}><ActionButton outline disabled={operation.busy} onClick={() => void thread(item.conversation_id)}>查看沟通</ActionButton></View>
           {item.status !== 'closed' && <>
             {item.host_id === session.user?.id && item.status === 'pending' && <View className={styles.action}><ActionButton outline disabled={operation.busy}
@@ -157,12 +159,14 @@ export default function ConsultationPage() {
             if (operation.active()) { await loadData(); if (item.conversation_id) await thread(item.conversation_id); }
           })}>查看提醒</ActionButton></View>)}
       </>}
-      {tab === 2 && sessions.map(item => <View className={styles.card} key={item.id}>
+      {tab === 2 && <>
+        {!sessions.length && !operation.busy && <StateView empty title="暂无登录会话" />}
+        {sessions.map(item => <View className={styles.card} key={item.id}>
         <Text className={styles.heading}>{item.is_current ? '当前会话' : '其他登录会话'}</Text>
         <Text className={styles.muted}>登录时间：{new Date(item.created_at).toLocaleString()}</Text>
         {!item.is_current && <ActionButton outline disabled={operation.busy}
           onClick={() => void mutate(`/auth/sessions/${encodeURIComponent(item.id)}`, 'DELETE', undefined, '撤销该登录会话？')}>撤销登录</ActionButton>}
-      </View>)}
+      </View>)}</>}
       {tab === 3 && <>
         <View className={styles.card}><Text className={styles.heading}>举报</Text>
           <Picker range={['用户', '服务', '体验', '消息']} disabled={operation.busy} onChange={event => setReportKind(['user', 'service', 'experience', 'message'][Number(event.detail.value)])}>
@@ -177,6 +181,7 @@ export default function ConsultationPage() {
           <View className={styles.action}><ActionButton outline disabled={operation.busy || reportKind !== 'user'}
             onClick={() => void mutate(`/me/blocks/${encodeURIComponent(target.trim())}`, 'PUT', undefined, '屏蔽后双方不能发送新的私信，历史聊天保留。')}>屏蔽此用户</ActionButton></View>
         </View>
+        {!blocks.length && !operation.busy && <StateView empty title="暂无屏蔽用户" />}
         {blocks.map(item => <View className={styles.card} key={item.peer_id}><Text className={styles.muted}>{item.peer_id}</Text>
           <ActionButton outline disabled={operation.busy} onClick={() => void mutate(`/me/blocks/${encodeURIComponent(item.peer_id)}`, 'DELETE', undefined, '解除屏蔽？')}>解除屏蔽</ActionButton></View>)}
       </>}
@@ -208,7 +213,7 @@ export default function ConsultationPage() {
           {item.admin_note && <Text className={styles.muted}>{item.admin_note}</Text>}
         </View>)}
       </>}
-      {more && [0, 1, 5, 6].includes(tab) && <ActionButton outline disabled={operation.busy} onClick={() => void run(() => loadData(true))}>加载更多</ActionButton>}
+      {more && [0, 1, 2, 3, 5, 6].includes(tab) && <ActionButton outline disabled={operation.busy} onClick={() => void run(() => loadData(true))}>加载更多</ActionButton>}
     </>}
   </View>;
 }

@@ -2223,6 +2223,69 @@ const deferred = () => {
   center.render(); switchConfirmation.resolve({ confirm: true }); await flushCallbacks();
   check('account switch invalidates a pending inquiry confirmation', () => assert.equal(consultationWrites.length, writesBeforeSwitch));
   center.unmount();
+  for (const [label, endpoint, emptyTitle] of [
+    ['会话', '/auth/sessions', '暂无登录会话'],
+    ['屏蔽与举报', '/me/blocks', '暂无屏蔽用户'],
+  ]) {
+    session.setSession(`pagination-${label}`, readyUser);
+    let rows = Array.from({ length: 101 }, (_, index) => ({
+      id: `session-${index}`, peer_id: `blocked-${index}`, is_current: false,
+      created_at: Date.now() + index, expires_at: Date.now() + 3600000,
+    }));
+    const pageRequests = [];
+    let rejectMore = true;
+    requestHandler = async options => {
+      if (!options.url.includes(endpoint)) return response([]);
+      pageRequests.push(options);
+      if (options.method === 'DELETE') {
+        const id = options.url.split('/').at(-1);
+        rows = rows.filter(row => (label === '会话' ? row.id : row.peer_id) !== id);
+        return response({ success: true });
+      }
+      const url = new URL(options.url);
+      const skip = Number(url.searchParams.get('skip') || 0);
+      if (skip && rejectMore) return response({ detail: 'Page unavailable' }, 503);
+      return response(rows.slice(skip, skip + 100));
+    };
+    const paged = createRenderer(ConsultationPage);
+    paged.render(); await flushCallbacks();
+    action(paged.render(), label).props.onClick(); paged.render(); await flushCallbacks();
+    const visibleCount = () => label === '会话'
+      ? nodes(paged.render()).filter(node => node.type === 'Text' && String(node.props.children) === '其他登录会话').length
+      : nodes(paged.render()).filter(node => node.type === 'Text' && String(node.props.children).startsWith('blocked-')).length;
+    check(`${label} first page is bounded and offers more`, () => {
+      assert.equal(visibleCount(), 100);
+      assert.ok(pageRequests.at(-1).url.includes('skip=0&limit=100'));
+      assert.ok(action(paged.render(), '加载更多'));
+    });
+    action(paged.render(), '加载更多').props.onClick(); await flushCallbacks();
+    check(`${label} failed next page preserves loaded rows and retry`, () => {
+      assert.equal(visibleCount(), 100);
+      assert.ok(action(paged.render(), '加载更多'));
+    });
+    rejectMore = false;
+    action(paged.render(), '加载更多').props.onClick(); await flushCallbacks();
+    check(`${label} next page appends without discarding rows`, () => {
+      assert.equal(visibleCount(), 101);
+      assert.ok(pageRequests.at(-1).url.includes('skip=100&limit=100'));
+      assert.ok(!hasText(paged.render(), '加载更多'));
+    });
+    taro.showModal = async () => ({ confirm: true });
+    action(paged.render(), label === '会话' ? '撤销登录' : '解除屏蔽').props.onClick(); await flushCallbacks();
+    check(`${label} successful mutation reloads from first page`, () => {
+      assert.equal(rows.length, 100);
+      assert.ok(pageRequests.at(-1).url.includes('skip=0&limit=100'));
+      assert.equal(visibleCount(), 100);
+    });
+    rows = [];
+    action(paged.render(), label === '会话' ? '屏蔽与举报' : '会话').props.onClick(); paged.render(); await flushCallbacks();
+    action(paged.render(), label).props.onClick(); paged.render(); await flushCallbacks();
+    check(`${label} empty list has an explicit state and no more button`, () => {
+      assert.ok(nodes(paged.render()).some(node => node.props.empty && node.props.title === emptyTitle));
+      assert.ok(!hasText(paged.render(), '加载更多'));
+    });
+    paged.unmount();
+  }
   taro.showModal = originalModal;
   routerParams = {};
   console.log(`PASS: ${checks.length} miniapp regression checks; no real API or account data used`);
