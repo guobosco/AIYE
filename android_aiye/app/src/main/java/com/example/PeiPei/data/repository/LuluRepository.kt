@@ -903,20 +903,29 @@ class LuluRepository(
     }
 
     suspend fun createService(service: Service): Service? = withContext(Dispatchers.IO) {
-        val local = service.copy(creatorId = currentUserId, isSynced = false).withNormalizedCategory()
-        serviceDao.insertService(local)
-        runCatching {
-            val created = apiService?.createService(local.copy(isSynced = true))
-            if (created != null) {
-                serviceDao.insertService(created.copy(isSynced = true).withNormalizedCategory())
-                created.withNormalizedCategory()
-            } else {
-                local
-            }
-        }.getOrElse {
-            Log.e(TAG, "createService failed", it)
-            local
+        try { createServiceConfirmed(service) }
+        catch (error: Exception) {
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            Log.e(TAG, "createService failed", error)
+            null
         }
+    }
+
+    suspend fun createServiceConfirmed(service: Service): Service = withContext(Dispatchers.IO) {
+        val owner = currentUserId
+        check(owner.isNotBlank() && service.creatorId == owner) { "请使用当前账号发布" }
+        val api = requireNotNull(apiService)
+        val local = service.copy(isSynced = true).withNormalizedCategory()
+        val created = try { api.createService(local) }
+        catch (error: Exception) {
+            if (error is kotlinx.coroutines.CancellationException) throw error
+            val existing = runCatching { api.getServiceById(service.id) }.getOrNull()
+            if (existing?.creatorId != owner) throw error
+            api.updateService(service.id, local)
+        }
+        check(currentUserId == owner) { "账号已切换" }
+        serviceDao.insertService(created.copy(isSynced = true).withNormalizedCategory())
+        created
     }
 
     suspend fun updateService(service: Service): Service? {

@@ -5,7 +5,7 @@ export default defineAppConfig({
     'pages/search/index', 'pages/thread/index', 'pages/login/index', 'pages/bind-phone/index', 'pages/profile/index',
     'pages/profile-edit/index', 'pages/publish/index', 'pages/published/index',
     'pages/payment/index', 'pages/activity/index', 'pages/calendar/index',
-    'pages/orders/index', 'pages/settings/index', 'pages/verification/index',
+    'pages/orders/index', 'pages/settings/index', 'pages/verification/index', 'pages/consultation/index',
   ],
   permission: { 'scope.userLocation': { desc: '用于选择服务地点和发送聊天位置' } },
   requiredPrivateInfos: ['chooseLocation'],

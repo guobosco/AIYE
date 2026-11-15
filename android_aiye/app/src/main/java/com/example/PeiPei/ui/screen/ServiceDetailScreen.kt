@@ -175,7 +175,7 @@ private fun buildServiceExtraFeeDescription(service: Service): String {
     return lines.joinToString("\n")
 }
 
-private fun applyCreatorPriceAndRulesFromSettings(
+private suspend fun applyCreatorPriceAndRulesFromSettings(
     base: Service,
     newPriceText: String,
     newPriceBasisText: String,
@@ -183,29 +183,15 @@ private fun applyCreatorPriceAndRulesFromSettings(
     fullRefundCancelLeadDays: Int,
     serviceMode: String,
 ) {
-    AppDataStore.updateService(
-        id = base.id,
-        title = base.title,
-        note = base.description,
-        participantIds = base.participantIds,
-        isImportant = base.isImportant,
-        location = base.location,
+    requireNotNull(AppDataStore.getRepository()).updateServiceConfirmed(base.copy(
         priceText = newPriceText,
         priceBasisText = newPriceBasisText,
         category = base.category,
         serviceMode = serviceMode,
-        coverImageUrl = base.coverImageUrl,
-        imageUrls = base.imageUrls,
-        syncToSquare = base.syncToSquare,
-        bookingTimeRangesJson = base.bookingTimeRangesJson,
-        bookingLeadHours = base.bookingLeadHours,
-        bookingFutureOpenDays = base.bookingFutureOpenDays,
         prepaymentPercent = prepaymentPercent,
         fullRefundCancelLeadDays = fullRefundCancelLeadDays,
-        autoAcceptAfterPayment = base.autoAcceptAfterPayment,
-        serviceDeclarationsExtra = base.serviceDeclarationsExtra,
-        isDraft = base.isDraft,
-    )
+        updatedAt = System.currentTimeMillis(),
+    ))
 }
 
 private val ServiceDetailPriceSubtitleGray = Color(0xFF666666)
@@ -647,6 +633,7 @@ fun ServiceDetailScreen(
     var showInquiryLocationDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
     var inquiryLocationEditBuffer by remember { androidx.compose.runtime.mutableStateOf("") }
     var inquiryComposeSending by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var inquiryRequest by remember { androidx.compose.runtime.mutableStateOf<Pair<String, String>?>(null) }
     var showAllServiceReviewsSheet by remember { androidx.compose.runtime.mutableStateOf(false) }
     val allServiceReviewsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val isFromWishlist = entrySource == "wishlist"
@@ -672,6 +659,7 @@ fun ServiceDetailScreen(
 
     val isCreator = service!!.creatorId == currentUser.id
     var showCreatorPriceSheet by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var savingCreatorPrice by remember { androidx.compose.runtime.mutableStateOf(false) }
     var showUnpublishConfirm by remember { androidx.compose.runtime.mutableStateOf(false) }
     var unpublishing by remember { androidx.compose.runtime.mutableStateOf(false) }
     var creatorPriceLaunchConsumed by remember(serviceId, openCreatorPriceOnLaunch) {
@@ -833,7 +821,14 @@ fun ServiceDetailScreen(
                             }
                             val sent = repo.sendChatMessage(
                                 conversationId = conversation.id,
-                                content = body
+                                content = body,
+                                clientMessageId = inquiryRequest?.takeIf { it.first == "$body|${service!!.id}|$inquiryComposeLocation|$inquiryComposeGuestCount|$inquiryComposeDateMillis" }?.second
+                                    ?: java.util.UUID.randomUUID().toString().also { inquiryRequest = "$body|${service!!.id}|$inquiryComposeLocation|$inquiryComposeGuestCount|$inquiryComposeDateMillis" to it },
+                                extra = mapOf(
+                                    "consultation" to "true", "service_id" to service!!.id,
+                                    "inquiry_date" to (inquiryComposeDateMillis?.let { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.ROOT).format(java.util.Date(it)) } ?: ""),
+                                    "guest_count" to inquiryComposeGuestCount.toString(), "location" to inquiryComposeLocation,
+                                )
                             )
                             if (sent == null) {
                                 snackbarHostState.showSnackbar("消息发送失败，请稍后重试")
@@ -845,6 +840,7 @@ fun ServiceDetailScreen(
                             inquiryComposeSending = false
                             showServiceInquirySheet = false
                             inquiryComposeMessage = ""
+                            inquiryRequest = null
                             inquiryComposeDateMillis = null
                             inquiryComposeGuestCount = 1
                             inquiryComposeLocation = ""
@@ -987,19 +983,27 @@ fun ServiceDetailScreen(
             onSurfaceVariantColor = sheetMuted,
             dividerColor = dividerColor,
             accentColor = ServiceDetailActionButtonColor,
-            onDismiss = { showCreatorPriceSheet = false },
+            onDismiss = { if (!savingCreatorPrice) showCreatorPriceSheet = false },
             onConfirm = { newPriceText, newBasis, newPrepay, newRefundDays, durationUnit ->
-                applyCreatorPriceAndRulesFromSettings(
+                if (!savingCreatorPrice) {
+                  savingCreatorPrice = true
+                scope.launch {
+                  try {
+                    applyCreatorPriceAndRulesFromSettings(
                     base = s,
                     newPriceText = newPriceText,
                     newPriceBasisText = newBasis,
                     prepaymentPercent = newPrepay,
                     fullRefundCancelLeadDays = newRefundDays,
                     serviceMode = durationUnit,
-                )
-                showCreatorPriceSheet = false
-                scope.launch {
-                    snackbarHostState.showSnackbar("价格与规则已更新")
+                    )
+                    showCreatorPriceSheet = false
+                    snackbarHostState.showSnackbar("价格与规则已提交审核")
+                  } catch (error: Exception) {
+                    if (error is kotlinx.coroutines.CancellationException) throw error
+                    snackbarHostState.showSnackbar("保存失败，填写内容已保留，请重试")
+                  } finally { savingCreatorPrice = false }
+                }
                 }
             },
         )

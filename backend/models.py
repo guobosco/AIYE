@@ -164,6 +164,62 @@ class AuthRateLimit(Base):
     window_start = Column(BigInteger, nullable=False)
     count = Column(Integer, default=0, nullable=False)
 
+class AccountClosure(Base):
+    __tablename__ = "account_closures"
+    user_id = Column(String, ForeignKey("users.id"), primary_key=True)
+    created_at = Column(BigInteger, nullable=False)
+
+
+class UserBlock(Base):
+    __tablename__ = "user_blocks"
+    __table_args__ = (UniqueConstraint("user_id", "peer_id"),)
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), index=True, nullable=False)
+    peer_id = Column(String, ForeignKey("users.id"), index=True, nullable=False)
+    created_at = Column(BigInteger, nullable=False)
+
+
+class Inquiry(Base):
+    __tablename__ = "inquiries"
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), index=True, nullable=False)
+    host_id = Column(String, ForeignKey("users.id"), index=True, nullable=False)
+    conversation_id = Column(String, ForeignKey("conversations.id"), nullable=False)
+    kind = Column(String, nullable=False)
+    item_id = Column(String, nullable=False)
+    title = Column(String, default="", nullable=False)
+    details = Column(JSON, default=dict, nullable=False)
+    status = Column(String, default="pending", nullable=False)
+    version = Column(Integer, default=1, nullable=False)
+    created_at = Column(BigInteger, nullable=False)
+    updated_at = Column(BigInteger, nullable=False)
+
+
+class InboxNotice(Base):
+    __tablename__ = "inbox_notices"
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), index=True, nullable=False)
+    kind = Column(String, nullable=False)
+    title = Column(String, nullable=False)
+    conversation_id = Column(String, default="", nullable=False)
+    is_read = Column(Boolean, default=False, nullable=False)
+    created_at = Column(BigInteger, nullable=False)
+
+
+class ReminderPreference(Base):
+    __tablename__ = "reminder_preferences"
+    user_id = Column(String, ForeignKey("users.id"), primary_key=True)
+    enabled = Column(Boolean, default=True, nullable=False)
+
+
+class PushRegistration(Base):
+    __tablename__ = "push_registrations"
+    id = Column(String, primary_key=True)
+    user_id = Column(String, ForeignKey("users.id"), index=True, nullable=False)
+    channel = Column(String, nullable=False)
+    token = Column(Text, nullable=False)
+    updated_at = Column(BigInteger, nullable=False)
+
 
 class Service(Base):
     """

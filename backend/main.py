@@ -6,11 +6,11 @@ from fastapi.staticfiles import StaticFiles
 try:
     from . import core, bootstrap, errors
     from . import routes_auth, routes_users, routes_wishlist, routes_feedback
-    from . import routes_catalog, routes_admin, routes_chat, routes_media
+    from . import routes_catalog, routes_admin, routes_chat, routes_media, routes_consultation
 except ImportError:
     import core, bootstrap, errors
     import routes_auth, routes_users, routes_wishlist, routes_feedback
-    import routes_catalog, routes_admin, routes_chat, routes_media
+    import routes_catalog, routes_admin, routes_chat, routes_media, routes_consultation
 
 
 @asynccontextmanager
@@ -34,7 +34,7 @@ app.mount("/static", StaticFiles(directory=core.STATIC_DIR, check_dir=False), na
 
 for module in (
     routes_auth, routes_users, routes_wishlist, routes_feedback,
-    routes_catalog, routes_admin, routes_chat, routes_media,
+    routes_catalog, routes_admin, routes_chat, routes_media, routes_consultation,
 ):
     app.include_router(module.router)
 

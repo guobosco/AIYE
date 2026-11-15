@@ -520,6 +520,7 @@ fun ExperienceDetailScreen(
     var showInquiryLocationDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
     var inquiryLocationEditBuffer by remember { androidx.compose.runtime.mutableStateOf("") }
     var inquiryComposeSending by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var inquiryRequest by remember { mutableStateOf<Pair<String, String>?>(null) }
     var showAllExperienceReviewsSheet by remember { androidx.compose.runtime.mutableStateOf(false) }
     val allExperienceReviewsSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -718,7 +719,14 @@ fun ExperienceDetailScreen(
                             }
                             val sent = repo.sendChatMessage(
                                 conversationId = conversation.id,
-                                content = body
+                                content = body,
+                                clientMessageId = inquiryRequest?.takeIf { it.first == "$body|${item.id}|$inquiryComposeLocation|$inquiryComposeGuestCount|$inquiryComposeDateMillis" }?.second
+                                    ?: java.util.UUID.randomUUID().toString().also { inquiryRequest = "$body|${item.id}|$inquiryComposeLocation|$inquiryComposeGuestCount|$inquiryComposeDateMillis" to it },
+                                extra = mapOf(
+                                    "consultation" to "true", "experience_id" to item.id,
+                                    "inquiry_date" to (inquiryComposeDateMillis?.let { java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.ROOT).format(java.util.Date(it)) } ?: ""),
+                                    "guest_count" to inquiryComposeGuestCount.toString(), "location" to inquiryComposeLocation,
+                                )
                             )
                             if (sent == null) {
                                 snackbarHostState.showSnackbar("消息发送失败，请稍后重试")
@@ -730,6 +738,7 @@ fun ExperienceDetailScreen(
                             inquiryComposeSending = false
                             showServiceInquirySheet = false
                             inquiryComposeMessage = ""
+                            inquiryRequest = null
                             inquiryComposeDateMillis = null
                             inquiryComposeGuestCount = 1
                             inquiryComposeLocation = ""

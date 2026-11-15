@@ -320,6 +320,9 @@ fun AppNavHost(intentState: Intent? = null) {
         composable(Screen.MyIncome.route) {
             MyIncomeScreen(navController = navController)
         }
+        composable(Screen.ConsultationCenter.route) {
+            com.example.aiye.ui.screen.ConsultationCenterScreen(navController)
+        }
         composable(Screen.UserInfo.route) {
             UserInfoScreen(navController = navController)
         }
@@ -522,6 +525,7 @@ sealed class Screen(val route: String) {
     object UserInfo : Screen("user_info")
     object RealNameVerification : Screen("real_name_verification")
     object Search : Screen("search")
+    object ConsultationCenter : Screen("consultation_center")
     object ExperienceCategoryFeed : Screen("experience_category_feed/{categoryTitle}") {
         fun createRoute(categoryTitle: String) = "experience_category_feed/${android.net.Uri.encode(categoryTitle)}"
     }

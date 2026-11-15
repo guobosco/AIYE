@@ -30,6 +30,7 @@ export default function PublishPage() {
   const [form, setForm] = useState<Form>(blank);
   const [tiers, setTiers] = useState<PriceTier[]>([{ name: '', price: '', duration_amount: 4, duration_unit: '小时' }]);
   const [busy, setBusy] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState('');
   const operation = useRef(false);
   const draftIds = useRef({ service: uniqueId(), experience: uniqueId() });
   const [loading, setLoading] = useState(!!params.id);
@@ -65,6 +66,11 @@ export default function PublishPage() {
           if (ownerId !== getSession().user?.id) throw new Error('仅发布者可以编辑此内容');
           if (active) {
             hydrate({ ...blank(), ...item }, decodePriceTiers(item.price_text, item.price_basis_text));
+            const stored = Taro.getStorageSync<{ form: Form; tiers: PriceTier[] }>(draftKey);
+            if (stored?.form) {
+              const result = await Taro.showModal({ title: '发现本机编辑备份', content: '是否恢复上次未提交的修改？服务器内容不会自动改变。' });
+              if (active && result.confirm) hydrate(stored.form, stored.tiers);
+            }
           }
         } else {
           const stored = Taro.getStorageSync<{ form: Form; tiers: PriceTier[] }>(draftKey);
@@ -116,13 +122,15 @@ export default function PublishPage() {
     try {
       const result = await Taro.chooseImage({ count: Math.min(9, 18 - (form.image_urls?.length || 0)), sizeType: ['compressed'] });
       if (getSession().user?.id !== userId) return;
-      const urls: string[] = [];
-      for (const path of result.tempFilePaths) urls.push((await upload(path, kind)).url);
-      if (getSession().user?.id !== userId) return;
-      setForm(current => ({ ...current, image_urls: [...new Set([...(current.image_urls || []), ...urls])].slice(0, 18) }));
+      for (const [index, path] of result.tempFilePaths.entries()) {
+        setUploadProgress(`正在上传 ${index + 1}/${result.tempFilePaths.length}`);
+        const url = (await upload(path, kind)).url;
+        if (getSession().user?.id !== userId) return;
+        setForm(current => ({ ...current, image_urls: [...new Set([...(current.image_urls || []), url])].slice(0, 18) }));
+      }
     } catch (err) {
       if (!(typeof err === 'object' && err !== null && 'errMsg' in err && String(err.errMsg).includes('cancel'))) showError(err);
-    } finally { operation.current = false; setBusy(false); }
+    } finally { operation.current = false; setBusy(false); setUploadProgress(''); }
   };
   const setStep = (index: number, patch: Partial<DetailStep>) => update('detail_steps',
     (form.detail_steps || []).map((step, i) => i === index ? { ...step, ...patch } : step));
@@ -134,14 +142,16 @@ export default function PublishPage() {
     try {
       const result = await Taro.chooseImage({ count: 9 - step.image_urls.length, sizeType: ['compressed'] });
       if (getSession().user?.id !== userId) return;
-      const urls: string[] = [];
-      for (const path of result.tempFilePaths) urls.push((await upload(path, 'experience')).url);
-      if (getSession().user?.id !== userId) return;
-      setForm(current => ({ ...current, detail_steps: current.detail_steps?.map((value, i) =>
-        i === index ? { ...value, image_urls: [...value.image_urls, ...urls].slice(0, 9) } : value) }));
+      for (const [uploadIndex, path] of result.tempFilePaths.entries()) {
+        setUploadProgress(`正在上传 ${uploadIndex + 1}/${result.tempFilePaths.length}`);
+        const url = (await upload(path, 'experience')).url;
+        if (getSession().user?.id !== userId) return;
+        setForm(current => ({ ...current, detail_steps: current.detail_steps?.map((value, i) =>
+          i === index ? { ...value, image_urls: [...value.image_urls, url].slice(0, 9) } : value) }));
+      }
     } catch (err) {
       if (!(typeof err === 'object' && err !== null && 'errMsg' in err && String(err.errMsg).includes('cancel'))) showError(err);
-    } finally { operation.current = false; setBusy(false); }
+    } finally { operation.current = false; setBusy(false); setUploadProgress(''); }
   };
   const manageImage = async (index: number) => {
     if (operation.current) return;
@@ -220,6 +230,13 @@ export default function PublishPage() {
   const hints = publicationHints(form.category);
   return <View className={styles.page}>
     <View className={styles.header}><Text className={styles.title}>{params.id ? '编辑' : '发布'}{kind === 'service' ? '服务' : '体验'}</Text></View>
+    <ActionButton outline disabled={busy} onClick={async () => {
+      const generation = getSessionGeneration();
+      const result = await Taro.showModal({ title: '离开编辑？', content: '内容会保留在本机备份，尚未保存到服务器。' });
+      if (result.confirm && getSessionGeneration() === generation) await Taro.navigateBack({});
+    }}>保留备份并返回</ActionButton>
+    <Text className={styles.muted}>编辑内容自动备份到本机；跨端继续请保存服务器草稿。已成功上传的图片会保留。</Text>
+    {uploadProgress && <Text className={styles.muted}>{uploadProgress}</Text>}
     {!params.id && <View className={styles.actions}>
       <View><ActionButton small outline={kind !== 'service'} onClick={() => !busy && setKind('service')}>服务</ActionButton></View>
       <View><ActionButton small outline={kind !== 'experience'} onClick={() => !busy && setKind('experience')}>体验</ActionButton></View>

@@ -76,13 +76,22 @@ def rate_limit(db, key, limit, window_seconds):
 
 
 def issue_session(db, user):
+    if db.get(models.AccountClosure, user.id):
+        raise HTTPException(403, "Account unavailable")
     now = millis()
+    had_session = db.query(models.AuthSession.id).filter_by(user_id=user.id).first() is not None
     refresh = secrets.token_urlsafe(48)
     row = models.AuthSession(
         id=uuid.uuid4().hex, user_id=user.id, refresh_hash=digest(refresh),
         created_at=now, expires_at=now + SESSION_DAYS * 86400000, revoked_at=0,
     )
     db.add(row)
+    if had_session:
+        try:
+            from .consultation_service import notice
+        except ImportError:
+            from consultation_service import notice
+        notice(db, user.id, row.id, "account", "账号发生新的登录，请检查登录会话", "", now)
     db.commit()
     return session_tokens(row, refresh)
 
@@ -112,7 +121,7 @@ def resolve_session(db, token):
                 or row.user_id != payload.get("sub")):
             raise ValueError()
         user = db.get(models.User, row.user_id)
-        if user is None:
+        if user is None or db.get(models.AccountClosure, user.id):
             raise ValueError()
         return row, user
     except (JWTError, ValueError, KeyError):
@@ -132,7 +141,7 @@ def rotate_session(db, refresh):
             replay.revoked_at = millis()
             db.commit()
         raise HTTPException(401, "Invalid refresh token")
-    if row.revoked_at or row.expires_at <= millis():
+    if row.revoked_at or row.expires_at <= millis() or db.get(models.AccountClosure, row.user_id):
         raise HTTPException(401, "Session expired or revoked")
     refresh = secrets.token_urlsafe(48)
     changed = db.execute(update(models.AuthSession).where(
@@ -206,7 +215,7 @@ def aliyun_rpc(host, action, version, params):
 
 def send_code(db, number, scene, owner, ip):
     number = phone(number)
-    if scene not in {"login", "register", "bind_wechat_phone"}:
+    if scene not in {"login", "register", "bind_wechat_phone", "change_phone_old", "change_phone_new", "close_account"}:
         raise HTTPException(400, "Unsupported verification scene")
     rate_limit(db, f"sms-ip:{ip}", 20, 3600)
     rate_limit(db, f"sms-phone:{number}", 5, 3600)
@@ -266,8 +275,11 @@ def consume_code(db, number, scene, owner, code):
     if not row or row.consumed or row.expires_at <= millis() or row.attempts >= 5:
         raise HTTPException(400, "Verification code expired or unavailable")
     if not hmac.compare_digest(row.code_hash, digest(f"{key}:{code.strip()}")):
+        trace_id = row.trace_id
+        # Persist only the failed attempt, never earlier account/code mutations.
+        db.rollback()
         db.execute(update(models.PhoneChallenge).where(
-            models.PhoneChallenge.key == key, models.PhoneChallenge.trace_id == row.trace_id,
+            models.PhoneChallenge.key == key, models.PhoneChallenge.trace_id == trace_id,
         ).values(attempts=models.PhoneChallenge.attempts + 1))
         db.commit()
         raise HTTPException(400, "Incorrect verification code")

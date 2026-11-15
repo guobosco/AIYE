@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import Taro from '@tarojs/taro';
-import { Input, Switch, Text, Textarea, View } from '@tarojs/components';
+import { Input, Text, Textarea, View } from '@tarojs/components';
 import { API_BASE, logoutRemote, request, showError } from '@/services/api';
 import { requireLogin, useSession } from '@/store/session';
 import { ActionButton, MenuRow } from '@/components/UI';
@@ -9,7 +9,6 @@ import styles from './index.module.scss';
 export default function SettingsPage() {
   const session = useSession();
   const [permissions, setPermissions] = useState<Taro.AuthSetting>({});
-  const [notifications, setNotifications] = useState(Taro.getStorageSync<boolean>('aiye.notifications') !== false);
   const [feedback, setFeedback] = useState('');
   const [busy, setBusy] = useState(false);
   const [contact, setContact] = useState('');
@@ -48,6 +47,7 @@ export default function SettingsPage() {
   return <View className={styles.page}>
     <View className={styles.header}><Text className={styles.title}>设置</Text></View>
     <View className={styles.section}><Text className={styles.heading}>账号</Text>
+      <MenuRow label="咨询中心" value="问询、提醒与账号安全" onClick={() => Taro.navigateTo({ url: '/pages/consultation/index' })} />
       <MenuRow label={session.user ? session.user.name : '登录账号'} value={session.user?.pei_pei_id} onClick={() => session.user
         ? Taro.navigateTo({ url: '/pages/profile-edit/index' }) : requireLogin()} />
       <MenuRow label="身份认证" value={session.user?.identity_verified ? '已认证' : '未认证'} onClick={() => { if (requireLogin()) void Taro.navigateTo({ url: '/pages/verification/index' }); }} />
@@ -58,8 +58,7 @@ export default function SettingsPage() {
     <View className={styles.section}><Text className={styles.heading}>权限设置</Text>
       <MenuRow label="位置权限" value={permissions['scope.userLocation'] ? '已允许' : '未允许'} onClick={() => void openPermissions()} />
       <MenuRow label="相册权限" value={permissions['scope.writePhotosAlbum'] ? '已允许' : '未允许'} onClick={() => void openPermissions()} />
-      <View className={styles.row}><Text className={styles.rowBody}>消息提醒偏好</Text><Switch checked={notifications} color="#E0115F"
-        onChange={event => { setNotifications(event.detail.value); Taro.setStorageSync('aiye.notifications', event.detail.value); }} /></View>
+      <MenuRow label="站内提醒偏好" value="跨端同步" onClick={() => Taro.navigateTo({ url: '/pages/consultation/index' })} />
       <Text className={styles.muted}>微信系统通知与订阅消息以平台授权为准。</Text>
     </View>
     <View className={styles.section}><Text className={styles.heading}>意见反馈</Text>

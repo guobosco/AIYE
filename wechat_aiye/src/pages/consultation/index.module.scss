@@ -1,0 +1,13 @@
+@use '@/styles/variables.scss' as *;
+
+.page { padding: $space-4 $page-padding $space-6; }
+.title { display: block; font-size: 40rpx; font-weight: 600; margin-bottom: $space-3; }
+.muted { display: block; color: $color-text-secondary; font-size: 24rpx; line-height: 1.6; overflow-wrap: anywhere; }
+.tabs { @include scroll-x-container; margin: $space-4 0; }
+.tab { @include scroll-x-item(264rpx); padding-right: $space-2; box-sizing: border-box; }
+.card { @include card-surface; padding: $space-4; box-sizing: border-box; margin-bottom: $space-3; }
+.heading { display: block; font-size: 32rpx; font-weight: 600; overflow-wrap: anywhere; margin-bottom: $space-2; }
+.input { width: 100%; min-height: 100rpx; padding: $space-2; box-sizing: border-box; border: 1rpx solid $color-border; border-radius: $radius-md; margin: $space-2 0; }
+.textarea { @extend .input; min-height: 192rpx; }
+.action { margin-top: $space-3; }
+.row { display: flex; justify-content: space-between; align-items: center; gap: $space-3; min-height: 100rpx; }

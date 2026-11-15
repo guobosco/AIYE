@@ -65,11 +65,12 @@ export default function PaymentPage() {
       // A single card contains the full inquiry. Retrying uses the same server deduplication key.
       await sendMessage(conversation.conversation.id, {
         type: kind === 'service' ? 'service' : 'experience', content, client_message_id: pending.current.messageId,
-        extra: { [`${kind}_id`]: item.id, title: item.title, description: item.description,
+        extra: { consultation: 'true', [`${kind}_id`]: item.id, title: item.title, description: item.description,
           price_text: kind === 'service' ? plan?.price || item.price_text : item.price_text,
           ...(kind === 'service' && plan ? { price_tier_name: planName, duration_amount: String(plan.duration_amount), duration_unit: plan.duration_unit } : {}),
           category: item.category, location: location.trim() || displayLocation(item.location), cover_image: item.cover_image_url,
-          inquiry_date: time, guest_count: guests, creator_id: host.id },
+          inquiry_date: `${dateKey(new Date(scheduled))} ${String(new Date(scheduled).getHours()).padStart(2, '0')}:${String(new Date(scheduled).getMinutes()).padStart(2, '0')}`,
+          guest_count: guests, creator_id: host.id },
       });
       recordBooking(item, kind, scheduled, conversation.conversation.id, pending.current.messageId);
       void Taro.redirectTo({ url: `/pages/thread/index?id=${encodeURIComponent(conversation.conversation.id)}&peer=${encodeURIComponent(host.id)}&${kind}=${encodeURIComponent(item.id)}&inquiry_date=${encodeURIComponent(time)}` });

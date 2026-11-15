@@ -665,6 +665,11 @@ def get_or_create_direct_conversation(db: Session, current_user: models.User, pe
     peer = db.query(models.User).filter(models.User.id == peer_id).first()
     if peer is None:
         raise HTTPException(status_code=404, detail="User not found")
+    try:
+        from .consultation_service import ensure_contact_allowed
+    except ImportError:
+        from consultation_service import ensure_contact_allowed
+    ensure_contact_allowed(db, current_user.id, peer_id)
 
     for conversation in db.query(models.Conversation).join(
         models.ConversationMember,

@@ -666,7 +666,7 @@ fun UserInfoScreen(navController: NavController, showBackButton: Boolean = true)
                     onClick = {
                         if (!isLoggedIn) navigateToLogin()
                         else {
-                            navController.navigate(Screen.MyBookedServices.route) {
+                            navController.navigate(Screen.ConsultationCenter.route) {
                                 launchSingleTop = true
                             }
                         }
@@ -726,7 +726,7 @@ fun UserInfoScreen(navController: NavController, showBackButton: Boolean = true)
                     onClick = {
                         if (!isLoggedIn) navigateToLogin()
                         else {
-                            navController.navigate(Screen.MyHostIncomingOrders.route) {
+                            navController.navigate(Screen.ConsultationCenter.route) {
                                 launchSingleTop = true
                             }
                         }
@@ -762,6 +762,11 @@ fun UserInfoScreen(navController: NavController, showBackButton: Boolean = true)
             }
 
             Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(
+                onClick = { navController.navigate(Screen.ConsultationCenter.route) },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp)
+            ) { Text("咨询中心 · 问询、提醒与账号安全") }
 
             // Group 3: 权限设置
             ProfileGroup(

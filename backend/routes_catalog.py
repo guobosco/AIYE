@@ -10,11 +10,13 @@ try:
     from .errors import commit_and_refresh
     from .experience_rating import compute_experience_rating_for_host
     from .core import models, schemas
+    from .consultation_service import hidden_hosts
 except ImportError:
     import core
     from errors import commit_and_refresh
     from experience_rating import compute_experience_rating_for_host
     from core import models, schemas
+    from consultation_service import hidden_hosts
 
 router = APIRouter()
 
@@ -81,6 +83,7 @@ def list_square_discovery_services(
     limit: int = Query(100, ge=1, le=200),
     updated_after: Optional[int] = Query(None, ge=0),
     db: Session = Depends(core.get_db),
+    viewer=Depends(core.get_optional_current_user),
 ):
     """
     广场发现：全站未删除的服务（按更新时间倒序）。
@@ -93,6 +96,9 @@ def list_square_discovery_services(
         models.Service.is_draft == False,
         models.Service.review_status == "approved",
     )
+    hidden = hidden_hosts(db, viewer)
+    if hidden:
+        query = query.filter(models.Service.creator_id.notin_(hidden))
     if updated_after is not None:
         query = query.filter(models.Service.updated_at > updated_after)
     items = (
@@ -275,12 +281,16 @@ def list_square_discovery_experiences(
     limit: int = Query(100, ge=1, le=200),
     updated_after: Optional[int] = Query(None, ge=0),
     db: Session = Depends(core.get_db),
+    viewer=Depends(core.get_optional_current_user),
 ):
     query = db.query(models.Experience).filter(
         models.Experience.is_deleted == False,
         models.Experience.is_draft == False,
         models.Experience.review_status == "approved",
     )
+    hidden = hidden_hosts(db, viewer)
+    if hidden:
+        query = query.filter(models.Experience.host_id.notin_(hidden))
     if updated_after is not None:
         query = query.filter(models.Experience.updated_at > updated_after)
     return (

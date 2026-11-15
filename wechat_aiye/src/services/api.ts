@@ -195,7 +195,7 @@ export const loginWithWeChat = async () => {
   setSession(result.access_token, result.user, result.refresh_token || '');
   return result;
 };
-export const sendPhoneCode = (phone: string, scene: 'login' | 'register' | 'bind_wechat_phone') =>
+export const sendPhoneCode = (phone: string, scene: 'login' | 'register' | 'bind_wechat_phone' | 'change_phone_old' | 'change_phone_new' | 'close_account') =>
   request<{ success: boolean; cooldown_seconds: number }>('/auth/phone/send-code', 'POST', { phone_number: phone, scene });
 export const logoutRemote = async (all = false) => {
   const generation = getSessionGeneration();

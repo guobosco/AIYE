@@ -31,12 +31,13 @@ export default function MinePage() {
       }}>编辑资料</Text>}
     </View>
     <View className={styles.surface}>
-      <MenuRow label="我预定的" onClick={() => open('/pages/activity/index?type=booked')} />
+      <MenuRow label="我的问询" onClick={() => open('/pages/consultation/index')} />
+      <MenuRow label="历史本机问询" onClick={() => open('/pages/activity/index?type=booked')} />
       <MenuRow label="我浏览的" onClick={() => Taro.navigateTo({ url: '/pages/activity/index?type=viewed' })} />
     </View>
     <View className={styles.surface}>
       <MenuRow label="我发布的" onClick={() => open('/pages/published/index')} />
-      <MenuRow label="我的接单" onClick={() => open('/pages/orders/index')} />
+      <MenuRow label="收到的问询" onClick={() => open('/pages/consultation/index')} />
       <MenuRow label="我的收入" onClick={() => open('/pages/orders/index?mode=income')} />
       <MenuRow label="评价我的" value={user ? `${user.review_count || 0}条` : ''} onClick={() => user ? open(`/pages/profile/index?id=${encodeURIComponent(user.id)}&section=reviews`) : requireLogin()} />
     </View>

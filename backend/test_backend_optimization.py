@@ -55,7 +55,12 @@ class BackendOptimizationTests(unittest.TestCase):
             ("/services/{service_id}/calendar/{day}", "put"),
         }
         self.assertTrue(parity_routes.issubset(set(routes)))
-        legacy_routes = [route for route in routes if route not in parity_routes]
+        from .routes_consultation import router as consultation_router
+        consultation_routes = {(route.path, method.lower())
+                               for route in consultation_router.routes for method in route.methods}
+        self.assertEqual(len(consultation_routes), 16)
+        self.assertTrue(consultation_routes.issubset(set(routes)))
+        legacy_routes = [route for route in routes if route not in parity_routes | consultation_routes]
         self.assertEqual(len(legacy_routes), 69)
         digest = hashlib.sha256(json.dumps(sorted(legacy_routes)).encode()).hexdigest()
         self.assertEqual(digest, "13a9ddf8ce5bfa3ad30dd721fb5f503e62094d42744b45e0fab9bc3db53383b1")

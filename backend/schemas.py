@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 # --- User Schemas (用户相关 Schema) ---
@@ -542,6 +542,62 @@ class CalendarDay(BaseModel):
 
 class CalendarResponse(BaseModel):
     days: Dict[str, CalendarDay] = Field(default_factory=dict)
+
+class Inquiry(BaseModel):
+    id: str
+    user_id: str
+    host_id: str
+    conversation_id: str
+    kind: str
+    item_id: str
+    title: str
+    details: Dict[str, Any]
+    status: str
+    version: int
+    created_at: int
+    updated_at: int
+    model_config = {"from_attributes": True}
+
+
+class InquiryUpdate(BaseModel):
+    status: Literal["replied", "closed"]
+    version: int = Field(ge=1)
+
+
+class Notice(BaseModel):
+    id: str
+    kind: str
+    title: str
+    conversation_id: str
+    is_read: bool
+    created_at: int
+    model_config = {"from_attributes": True}
+
+
+class ReportRequest(BaseModel):
+    kind: Literal["user", "service", "experience", "message"]
+    target_id: str = Field(min_length=1, max_length=128)
+    reason: str = Field(min_length=2, max_length=2000)
+
+
+class PhoneChangeRequest(BaseModel):
+    phone_number: str
+    old_code: str = Field(min_length=6, max_length=6)
+    new_code: str = Field(min_length=6, max_length=6)
+
+
+class AccountCloseRequest(BaseModel):
+    verify_code: str = Field(min_length=6, max_length=6)
+    confirmation: Literal["注销账号"]
+
+
+class ReminderUpdate(BaseModel):
+    enabled: bool
+
+
+class PushRegistrationRequest(BaseModel):
+    channel: Literal["apns", "android", "weapp"]
+    token: str = Field(min_length=1, max_length=4096)
 
 class ConversationBase(BaseModel):
     type: str = "direct"

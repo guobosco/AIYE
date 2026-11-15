@@ -7,9 +7,11 @@ from sqlalchemy.exc import IntegrityError
 try:
     from . import core
     from .core import models, schemas
+    from .consultation_service import ensure_contact_allowed, capture_inquiry, notice
 except ImportError:
     import core
     from core import models, schemas
+    from consultation_service import ensure_contact_allowed, capture_inquiry, notice
 
 
 def validate_retry(message, payload):
@@ -35,6 +37,9 @@ def persist_message(db, current_user, conversation_id, payload):
         message_id = str(uuid.uuid5(uuid.NAMESPACE_URL, key))
     else:
         message_id = str(uuid.uuid4())
+    for peer_id in conversation.participant_ids or []:
+        if peer_id != current_user.id:
+            ensure_contact_allowed(db, current_user.id, peer_id)
     message = models.ChatMessage(
         id=message_id, conversation_id=conversation_id, sender_id=current_user.id,
         **payload.model_dump(), status="sent",
@@ -67,6 +72,10 @@ def persist_message(db, current_user, conversation_id, payload):
             "last_read_message_id": message.id, "last_read_at": now, "updated_at": now,
         }, synchronize_session=False)
         participants = list(conversation.participant_ids or [])
+        capture_inquiry(db, current_user, conversation, message)
+        for peer_id in participants:
+            if peer_id != current_user.id:
+                notice(db, peer_id, message.id, "message", "收到一条新消息", conversation_id, now)
         db.commit()
         db.refresh(message)
     except IntegrityError:

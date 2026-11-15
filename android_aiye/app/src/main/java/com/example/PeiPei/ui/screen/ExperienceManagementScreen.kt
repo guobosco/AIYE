@@ -191,14 +191,46 @@ private fun ExperienceEditor(initial: Experience, onClose: () -> Unit, onSaved: 
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var tags by remember { mutableStateOf(initial.tags.joinToString("、")) }
+    val prefs = remember { context.getSharedPreferences("publication_backups", android.content.Context.MODE_PRIVATE) }
+    val backupKey = "experience.${initial.hostId}.${if (initial.isSynced) initial.id else "new"}"
+    val backup = remember(backupKey) {
+        runCatching { com.google.gson.Gson().fromJson(prefs.getString(backupKey, null), Experience::class.java) }.getOrNull()
+    }
+    var restore by remember { mutableStateOf(backup != null) }
+    var completed by remember { mutableStateOf(false) }
+    var leave by remember { mutableStateOf(false) }
+    var uploadCount by remember { mutableStateOf("") }
+    LaunchedEffect(value, tags, restore) {
+        if (restore || completed) return@LaunchedEffect
+        kotlinx.coroutines.delay(500)
+        if (AppDataStore.currentUser.value.id == initial.hostId) {
+            prefs.edit().putString(backupKey, com.google.gson.Gson().toJson(value.copy(
+                tags = tags.split("、", ",", "，").map { it.trim() }.filter { it.isNotEmpty() }
+            ))).apply()
+        }
+    }
+    if (restore && backup != null) AlertDialog(onDismissRequest = {},
+        title = { Text("恢复本机编辑备份？") }, text = { Text("本机备份不会自动公开，不替代服务器草稿。") },
+        confirmButton = { TextButton(onClick = { value = backup; tags = backup.tags.joinToString("、"); restore = false }) { Text("恢复") } },
+        dismissButton = { TextButton(onClick = { prefs.edit().remove(backupKey).apply(); restore = false }) { Text("不恢复") } })
+    androidx.activity.compose.BackHandler { if (!busy) leave = true }
+    if (leave) AlertDialog(onDismissRequest = { leave = false },
+        title = { Text("离开编辑？") }, text = { Text("内容会保留在本机备份，尚未保存到服务器。") },
+        confirmButton = { TextButton(onClick = {
+            prefs.edit().putString(backupKey, com.google.gson.Gson().toJson(value.copy(
+                tags = tags.split("、", ",", "，").map { it.trim() }.filter { it.isNotEmpty() }
+            ))).apply(); onClose()
+        }) { Text("保留备份并离开") } },
+        dismissButton = { TextButton(onClick = { leave = false }) { Text("继续编辑") } })
     val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         if (uris.isNotEmpty() && !busy) {
             busy = true
             scope.launch {
                 try {
                     val owner = AppDataStore.currentUser.value.id
-                    val urls = mutableListOf<String>()
-                    for (uri in uris.take((18 - value.imageUrls.size).coerceAtLeast(0))) {
+                    val selected = uris.take((18 - value.imageUrls.size).coerceAtLeast(0))
+                    for ((index, uri) in selected.withIndex()) {
+                        uploadCount = "正在上传 ${index + 1}/${selected.size}"
                         val url = withContext(Dispatchers.IO) {
                             val file = File.createTempFile("experience-", ".jpg", context.cacheDir)
                             try {
@@ -208,17 +240,20 @@ private fun ExperienceEditor(initial: Experience, onClose: () -> Unit, onSaved: 
                                 AppDataStore.getRepository()?.uploadServiceFile(file)?.url ?: error("上传失败")
                             } finally { file.delete() }
                         }
-                        urls.add(url)
+                        if (AppDataStore.currentUser.value.id != owner) return@launch
+                        value = value.copy(imageUrls = value.imageUrls + url)
                     }
-                    if (AppDataStore.currentUser.value.id == owner) value = value.copy(imageUrls = value.imageUrls + urls)
                 } catch (e: Exception) { error = "图片上传失败，请重试" }
-                finally { busy = false }
+                finally { busy = false; uploadCount = "" }
             }
         }
     }
     fun save(draft: Boolean) {
         if (busy) return
         val owner = AppDataStore.currentUser.value
+        if (owner.id != initial.hostId) {
+            error = "账号已切换，请重新打开编辑器"; return
+        }
         if (!owner.isPhoneVerified || !owner.hasCompletedOnboardingProfile() || AuthSession.getAccessToken() == null) {
             error = "请先完成账号验证和资料"; return
         }
@@ -244,7 +279,9 @@ private fun ExperienceEditor(initial: Experience, onClose: () -> Unit, onSaved: 
                         api.updateExperience(payload.id, payload)
                     }
                 }
-                if (AppDataStore.currentUser.value.id == owner.id) onSaved()
+                if (AppDataStore.currentUser.value.id == owner.id) {
+                    completed = true; prefs.edit().remove(backupKey).apply(); onSaved()
+                }
             } catch (e: Exception) { error = "保存失败，填写内容已保留，请重试" }
             finally { busy = false }
         }
@@ -252,6 +289,8 @@ private fun ExperienceEditor(initial: Experience, onClose: () -> Unit, onSaved: 
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("发布体验", style = MaterialTheme.typography.headlineSmall)
+        Text("编辑内容自动备份到本机；跨端继续请保存服务器草稿。")
+        if (uploadCount.isNotBlank()) Text(uploadCount)
         OutlinedTextField(value.title, { value = value.copy(title = it) }, enabled = !busy, label = { Text("标题") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(value.description, { value = value.copy(description = it) }, enabled = !busy, label = { Text("描述") }, modifier = Modifier.fillMaxWidth())
         OutlinedTextField(value.category, { value = value.copy(category = it) }, enabled = !busy, label = { Text("体验方向") }, modifier = Modifier.fillMaxWidth())
@@ -282,7 +321,7 @@ private fun ExperienceEditor(initial: Experience, onClose: () -> Unit, onSaved: 
         OutlinedButton(enabled = !busy, onClick = { value = value.copy(detailSteps = value.detailSteps + ExperienceDetailStep()) }) { Text("添加体验步骤") }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(enabled = !busy, onClick = onClose) { Text("返回") }
+            OutlinedButton(enabled = !busy, onClick = { leave = true }) { Text("返回") }
             OutlinedButton(enabled = !busy, onClick = { save(true) }) { Text("保存草稿") }
             Button(enabled = !busy, onClick = { save(false) }) { Text("提交审核") }
         }

@@ -75,6 +75,8 @@ import android.view.WindowManager
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import android.media.MediaPlayer
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collectLatest
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalFocusManager
@@ -124,6 +126,7 @@ fun CreateServiceScreen(
     openBookingOnLaunch: Boolean = false,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val navServiceId = serviceId?.trim()?.takeIf { it.isNotEmpty() && it != "{serviceId}" }
     /** 首次存草稿后写入本地，后续保存走更新 */
     var localDraftServiceId by remember { mutableStateOf<String?>(null) }
@@ -134,6 +137,11 @@ fun CreateServiceScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val view = LocalView.current
     val currentUser by AppDataStore.currentUser.collectAsState()
+    val editingOwner = remember { currentUser.id }
+    if (currentUser.id != editingOwner) {
+        LaunchedEffect(Unit) { navController.popBackStack() }
+        return
+    }
     if (currentUser.id.isBlank() || !currentUser.isPhoneVerified ||
         listOf(currentUser.name, currentUser.gender, currentUser.region, currentUser.photoUrl).any { it.isBlank() }) {
         Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
@@ -226,6 +234,8 @@ fun CreateServiceScreen(
 
     // 状态：提交中（防抖与防重复）
     var isSubmitting by remember { mutableStateOf(false) }
+    var uploadProgress by remember { mutableStateOf("") }
+    var showLeaveConfirm by remember { mutableStateOf(false) }
     // 状态：编辑确认弹窗
     var showEditConfirmDialog by remember { mutableStateOf(false) }
     
@@ -366,6 +376,7 @@ fun CreateServiceScreen(
     }
     
     // 加载已有数据
+    var formInitialized by remember { mutableStateOf(false) }
     LaunchedEffect(serviceId, initialUserIds, openBookingOnLaunch) {
         if (navServiceId != null) {
             val service = AppDataStore.getServiceById(navServiceId)
@@ -423,6 +434,7 @@ fun CreateServiceScreen(
             // 新建服务，默认选中自己
             selectedParticipants = listOf(currentUser)
         }
+        formInitialized = true
     }
 
     LaunchedEffect(serviceCategory) {
@@ -437,189 +449,137 @@ fun CreateServiceScreen(
         )
     }
 
-    // 执行保存
-    fun performSave() {
-        keyboardController?.hide()
-        isSubmitting = true
-        val publishContent = description.trim()
-        val publishTitle = title.trim()
-        val category = checkNotNull(serviceCategory) { "category required" }
-        val savedImageUrls = serviceImageUris.take(maxServiceImageCount)
-        val savedCoverImage = savedImageUrls.firstOrNull().orEmpty()
-
-        val finalParticipantIds = selectedParticipants.map { it.id }.distinct()
-        val bookingJson = BookingTimeRangesCodec.encode(bookingTimeSlots)
-
-        if (isEditMode && effectiveServiceId != null) {
-             AppDataStore.updateService(
-                id = effectiveServiceId,
-                title = publishTitle,
-                note = publishContent,
-                participantIds = finalParticipantIds,
-                isImportant = isImportant,
-                location = locationText,
-                priceText = priceText,
-                priceBasisText = priceBasisText,
-                category = category,
-                serviceMode = serviceMode,
-                coverImageUrl = savedCoverImage,
-                imageUrls = savedImageUrls,
-                syncToSquare = syncToSquare,
-                bookingTimeRangesJson = bookingJson,
-                bookingLeadHours = BookingTimeRangesCodec.normalizeBookingLeadHours(bookingLeadHours),
-                bookingFutureOpenDays = BookingTimeRangesCodec.normalizeBookingFutureOpenDays(bookingFutureOpenDays),
-                prepaymentPercent = prepaymentPercent.coerceIn(0, 100),
-                fullRefundCancelLeadDays = fullRefundCancelLeadDays.coerceIn(0, 10),
-                autoAcceptAfterPayment = autoAcceptAfterPayment,
-                serviceFeatureTags = serviceFeatureTags,
-                serviceExtraFeeTags = serviceExtraFeeTags,
-                serviceDeclarationsExtra = extraServiceDeclarations,
-                isDraft = false,
-            )
-             android.widget.Toast.makeText(context, "服务已更新", android.widget.Toast.LENGTH_SHORT).show()
-
-             // 播放成功音效
-             try {
-                 val mediaPlayer = MediaPlayer.create(context, R.raw.success)
-                 mediaPlayer.setOnCompletionListener { mp -> mp.release() }
-                 mediaPlayer.start()
-             } catch (e: Exception) {
-                 e.printStackTrace()
-             }
-
-             navController.popBackStack()
-        } else {
-            // 创建服务
-            val newService = AppDataStore.addService(
-                title = publishTitle,
-                note = publishContent,
-                participantIds = finalParticipantIds,
-                isImportant = isImportant,
-                location = locationText,
-                priceText = priceText,
-                priceBasisText = priceBasisText,
-                category = category,
-                serviceMode = serviceMode,
-                coverImageUrl = savedCoverImage,
-                imageUrls = savedImageUrls,
-                syncToSquare = syncToSquare,
-                bookingTimeRangesJson = bookingJson,
-                bookingLeadHours = BookingTimeRangesCodec.normalizeBookingLeadHours(bookingLeadHours),
-                bookingFutureOpenDays = BookingTimeRangesCodec.normalizeBookingFutureOpenDays(bookingFutureOpenDays),
-                prepaymentPercent = prepaymentPercent.coerceIn(0, 100),
-                fullRefundCancelLeadDays = fullRefundCancelLeadDays.coerceIn(0, 10),
-                autoAcceptAfterPayment = autoAcceptAfterPayment,
-                serviceFeatureTags = serviceFeatureTags,
-                serviceExtraFeeTags = serviceExtraFeeTags,
-                serviceDeclarationsExtra = extraServiceDeclarations,
-                isDraft = false,
-            )
-            android.widget.Toast.makeText(context, "服务已发布", android.widget.Toast.LENGTH_SHORT).show()
-
-            // 播放成功音效
-            try {
-                val mediaPlayer = MediaPlayer.create(context, R.raw.success)
-                mediaPlayer.setOnCompletionListener { mp -> mp.release() }
-                mediaPlayer.start()
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-
-            // 创建成功后跳转到详情页，并移除当前的创建页面
-            navController.navigate(Screen.ServiceDetail.createRoute(newService.id)) {
-                popUpTo(Screen.CreateService.route) {
-                    inclusive = true
-                }
+    var publishRequestId by remember { mutableStateOf(java.util.UUID.randomUUID().toString()) }
+    val draftPreferences = remember { context.getSharedPreferences("publication_backups", android.content.Context.MODE_PRIVATE) }
+    val backupKey = "service.${currentUser.id}.${navServiceId ?: "new"}"
+    val backup = remember(backupKey) {
+        runCatching { com.google.gson.Gson().fromJson(draftPreferences.getString(backupKey, null), com.example.aiye.data.model.Service::class.java) }.getOrNull()
+    }
+    var showRestoreBackup by remember(backupKey) { mutableStateOf(backup != null) }
+    var saveCompleted by remember { mutableStateOf(false) }
+    fun formService(draft: Boolean): com.example.aiye.data.model.Service {
+        val id = effectiveServiceId ?: publishRequestId
+        val base = AppDataStore.services.value.firstOrNull { it.id == id } ?: com.example.aiye.data.model.Service(
+            id = id, creatorId = currentUser.id, creator = currentUser.name,
+            createdAt = System.currentTimeMillis(), updatedAt = System.currentTimeMillis()
+        )
+        return base.copy(
+            title = title.trim().ifBlank { if (draft) "未命名草稿" else "" },
+            description = description.trim(), location = locationText,
+            category = serviceCategory ?: ServiceCategories.OTHER,
+            priceText = priceText, priceBasisText = priceBasisText, serviceMode = serviceMode,
+            imageUrls = serviceImageUris.take(maxServiceImageCount),
+            coverImageUrl = serviceImageUris.firstOrNull().orEmpty(),
+            participantIds = selectedParticipants.map { it.id }.distinct(),
+            prepaymentPercent = prepaymentPercent.coerceIn(0, 100),
+            fullRefundCancelLeadDays = fullRefundCancelLeadDays.coerceIn(0, 10),
+            bookingTimeRangesJson = BookingTimeRangesCodec.encode(bookingTimeSlots),
+            bookingLeadHours = BookingTimeRangesCodec.normalizeBookingLeadHours(bookingLeadHours),
+            bookingFutureOpenDays = BookingTimeRangesCodec.normalizeBookingFutureOpenDays(bookingFutureOpenDays),
+            autoAcceptAfterPayment = autoAcceptAfterPayment, serviceFeatureTags = serviceFeatureTags,
+            serviceExtraFeeTags = serviceExtraFeeTags, serviceDeclarationsExtra = extraServiceDeclarations,
+            syncToSquare = syncToSquare, isImportant = isImportant, isDraft = draft, isDeleted = false,
+            updatedAt = System.currentTimeMillis(),
+        )
+    }
+    LaunchedEffect(backupKey, showRestoreBackup, formInitialized) {
+        if (showRestoreBackup || !formInitialized) return@LaunchedEffect
+        snapshotFlow { formService(true) }.collectLatest { value ->
+            kotlinx.coroutines.delay(500)
+            if (!saveCompleted && AppDataStore.currentUser.value.id == value.creatorId &&
+                (title.isNotBlank() || description.isNotBlank() || serviceImageUris.isNotEmpty())) {
+                draftPreferences.edit().putString(backupKey, com.google.gson.Gson().toJson(value)).apply()
             }
         }
     }
-
-    fun performSaveDraft() {
-        keyboardController?.hide()
+    if (formInitialized && showRestoreBackup && backup != null) AlertDialog(
+        onDismissRequest = {},
+        title = { Text("发现本机编辑备份") },
+        text = { Text("恢复上次未提交的内容？本机备份不会自动公开，也不替代服务器草稿。") },
+        confirmButton = { TextButton(onClick = {
+            publishRequestId = backup.id
+            title = backup.title; description = backup.description; serviceCategory = backup.category
+            priceText = backup.priceText; priceBasisText = backup.priceBasisText; serviceMode = backup.serviceMode
+            locationText = backup.location; serviceImageUris = backup.imageUrls
+            prepaymentPercent = backup.prepaymentPercent; fullRefundCancelLeadDays = backup.fullRefundCancelLeadDays
+            serviceFeatureTags = backup.serviceFeatureTags; serviceExtraFeeTags = backup.serviceExtraFeeTags
+            extraServiceDeclarations = backup.serviceDeclarationsExtra; syncToSquare = backup.syncToSquare
+            isImportant = backup.isImportant; autoAcceptAfterPayment = backup.autoAcceptAfterPayment
+            bookingTimeSlots = BookingTimeRangesCodec.decode(backup.bookingTimeRangesJson)
+            bookingLeadHours = backup.bookingLeadHours; bookingFutureOpenDays = backup.bookingFutureOpenDays
+            selectedParticipants = backup.participantIds.mapNotNull { AppDataStore.getUserById(it) }
+            showCategoryGate = false; showRestoreBackup = false
+        }) { Text("恢复") } },
+        dismissButton = { TextButton(onClick = {
+            draftPreferences.edit().remove(backupKey).apply(); showRestoreBackup = false
+        }) { Text("不恢复") } }
+    )
+    fun saveForm(draft: Boolean) {
         if (isSubmitting) return
+        keyboardController?.hide()
+        val value = formService(draft)
         isSubmitting = true
-        val category = serviceCategory ?: ServiceCategories.OTHER
-        val publishContent = description.trim()
-        val publishTitle = title.trim().ifBlank { "未命名草稿" }
-        val savedImageUrls = serviceImageUris.take(maxServiceImageCount)
-        val savedCoverImage = savedImageUrls.firstOrNull().orEmpty()
-        val finalParticipantIds = selectedParticipants.map { it.id }.distinct()
-        val bookingJson = BookingTimeRangesCodec.encode(bookingTimeSlots)
-        val id = effectiveServiceId
-        try {
-            if (id != null) {
-                AppDataStore.updateService(
-                    id = id,
-                    title = publishTitle,
-                    note = publishContent.ifBlank { publishTitle },
-                    participantIds = finalParticipantIds,
-                    isImportant = isImportant,
-                    location = locationText,
-                    priceText = priceText,
-                    priceBasisText = priceBasisText,
-                    category = category,
-                    serviceMode = serviceMode,
-                    coverImageUrl = savedCoverImage,
-                    imageUrls = savedImageUrls,
-                    syncToSquare = syncToSquare,
-                    bookingTimeRangesJson = bookingJson,
-                    bookingLeadHours = BookingTimeRangesCodec.normalizeBookingLeadHours(bookingLeadHours),
-                    bookingFutureOpenDays = BookingTimeRangesCodec.normalizeBookingFutureOpenDays(bookingFutureOpenDays),
-                    prepaymentPercent = prepaymentPercent.coerceIn(0, 100),
-                    fullRefundCancelLeadDays = fullRefundCancelLeadDays.coerceIn(0, 10),
-                    autoAcceptAfterPayment = autoAcceptAfterPayment,
-                    serviceFeatureTags = serviceFeatureTags,
-                    serviceExtraFeeTags = serviceExtraFeeTags,
-                    serviceDeclarationsExtra = extraServiceDeclarations,
-                    isDraft = true,
-                )
-            } else {
-                val newService = AppDataStore.addService(
-                    title = publishTitle,
-                    note = publishContent.ifBlank { publishTitle },
-                    participantIds = finalParticipantIds,
-                    isImportant = isImportant,
-                    location = locationText,
-                    priceText = priceText,
-                    priceBasisText = priceBasisText,
-                    category = category,
-                    serviceMode = serviceMode,
-                    coverImageUrl = savedCoverImage,
-                    imageUrls = savedImageUrls,
-                    syncToSquare = syncToSquare,
-                    bookingTimeRangesJson = bookingJson,
-                    bookingLeadHours = BookingTimeRangesCodec.normalizeBookingLeadHours(bookingLeadHours),
-                    bookingFutureOpenDays = BookingTimeRangesCodec.normalizeBookingFutureOpenDays(bookingFutureOpenDays),
-                    prepaymentPercent = prepaymentPercent.coerceIn(0, 100),
-                    fullRefundCancelLeadDays = fullRefundCancelLeadDays.coerceIn(0, 10),
-                    autoAcceptAfterPayment = autoAcceptAfterPayment,
-                    serviceFeatureTags = serviceFeatureTags,
-                    serviceExtraFeeTags = serviceExtraFeeTags,
-                    serviceDeclarationsExtra = extraServiceDeclarations,
-                    isDraft = true,
-                )
-                localDraftServiceId = newService.id
-            }
-            android.widget.Toast.makeText(context, "已存为草稿", android.widget.Toast.LENGTH_SHORT).show()
-            val previousRoute = navController.previousBackStackEntry?.destination?.route.orEmpty()
-            if (previousRoute.startsWith(Screen.MyPublishedServices.baseRoute)) {
-                navController.navigate(
-                    Screen.MyPublishedServices.createRoute(initialSection = "drafts")
-                ) {
-                    popUpTo(Screen.MyPublishedServices.route) { inclusive = true }
-                    launchSingleTop = true
+        scope.launch {
+            try {
+                val repository = requireNotNull(AppDataStore.getRepository()) { "连接尚未就绪" }
+                val images = value.imageUrls.toMutableList()
+                for ((index, uri) in images.toList().withIndex()) {
+                    if (uri.startsWith("https://") || uri.startsWith("http://") || uri.startsWith("/static/")) continue
+                    uploadProgress = "正在上传 ${index + 1}/${images.size}"
+                    val uploaded = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        val file = java.io.File.createTempFile("service-", ".jpg", context.cacheDir)
+                        try {
+                            val stream = if (uri.startsWith("/")) java.io.File(uri).inputStream()
+                                else context.contentResolver.openInputStream(Uri.parse(uri))
+                            requireNotNull(stream) { "图片无法读取，请重新选择" }.use { input ->
+                                file.outputStream().use { input.copyTo(it) }
+                            }
+                            requireNotNull(repository.uploadServiceFile(file)?.url) { "图片上传失败，请重试" }
+                        } finally { file.delete() }
+                    }
+                    check(AppDataStore.currentUser.value.id == value.creatorId) { "账号已切换" }
+                    images[index] = uploaded
+                    serviceImageUris = images.toList()
+                    draftPreferences.edit().putString(backupKey, com.google.gson.Gson().toJson(
+                        value.copy(imageUrls = images.toList(), coverImageUrl = images.firstOrNull().orEmpty())
+                    )).apply()
                 }
-            } else {
-                navController.navigate(
-                    Screen.MyPublishedServices.createRoute(initialSection = "drafts")
-                ) {
+                uploadProgress = ""
+                val payload = value.copy(imageUrls = images, coverImageUrl = images.firstOrNull().orEmpty())
+                val saved = if (AppDataStore.getServiceById(value.id)?.isSynced == true) {
+                    repository.updateServiceConfirmed(payload)
+                } else {
+                    repository.createServiceConfirmed(payload)
+                }
+                localDraftServiceId = saved.id
+                saveCompleted = true
+                draftPreferences.edit().remove(backupKey).apply()
+                android.widget.Toast.makeText(context, if (draft) "草稿已保存到服务器" else "已提交审核", android.widget.Toast.LENGTH_SHORT).show()
+                if (draft) navController.navigate(Screen.MyPublishedServices.createRoute(initialSection = "drafts")) {
+                    popUpTo(Screen.CreateService.route) { inclusive = true }
+                } else navController.navigate(Screen.ServiceDetail.createRoute(saved.id)) {
                     popUpTo(Screen.CreateService.route) { inclusive = true }
                 }
-            }
-        } finally {
-            isSubmitting = false
+            } catch (error: Exception) {
+                errorMessage = error.message ?: "保存失败，输入已保留，请重试"
+            } finally { isSubmitting = false; uploadProgress = "" }
         }
     }
+    fun performSave() = saveForm(false)
+    fun performSaveDraft() = saveForm(true)
+    androidx.activity.compose.BackHandler {
+        if (!isSubmitting) showLeaveConfirm = true
+    }
+    if (showLeaveConfirm) AlertDialog(
+        onDismissRequest = { showLeaveConfirm = false },
+        title = { Text("离开编辑？") },
+        text = { Text("当前内容会保留在本机备份，尚未保存到服务器。") },
+        confirmButton = { TextButton(onClick = {
+            draftPreferences.edit().putString(backupKey, com.google.gson.Gson().toJson(formService(true))).apply()
+            navController.popBackStack()
+        }) { Text("保留备份并离开") } },
+        dismissButton = { TextButton(onClick = { showLeaveConfirm = false }) { Text("继续编辑") } }
+    )
 
     // 提交处理
     fun handleSubmit() {
@@ -676,9 +636,9 @@ fun CreateServiceScreen(
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = {},
+                title = { if (uploadProgress.isNotBlank()) Text(uploadProgress, fontSize = 14.sp) },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
+                    IconButton(enabled = !isSubmitting, onClick = { showLeaveConfirm = true }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },

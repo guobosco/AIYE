@@ -21,6 +21,31 @@ import okhttp3.MultipartBody
 
 import com.google.gson.annotations.SerializedName
 
+data class ConsultationInquiry(
+    val id: String, val title: String, val kind: String, val status: String, val version: Int,
+    @SerializedName("user_id") val userId: String,
+    @SerializedName("host_id") val hostId: String,
+    @SerializedName("conversation_id") val conversationId: String,
+    val details: Map<String, Any> = emptyMap()
+)
+data class ConsultationNotice(
+    val id: String, val title: String,
+    @SerializedName("conversation_id") val conversationId: String,
+    @SerializedName("is_read") val isRead: Boolean
+)
+data class LoginSession(
+    val id: String,
+    @SerializedName("created_at") val createdAt: Long,
+    @SerializedName("expires_at") val expiresAt: Long,
+    @SerializedName("is_current") val isCurrent: Boolean
+)
+data class BlockedAccount(@SerializedName("peer_id") val peerId: String)
+data class ConsultationFeedback(val id: String, val category: String, val status: String,
+                                @SerializedName("admin_note") val adminNote: String)
+data class ReminderSettings(val enabled: Boolean, @SerializedName("remote_push_enabled") val remotePushEnabled: Boolean)
+data class CatalogSearchItem(val id: String, val kind: String, val title: String, val location: String,
+                             @SerializedName("host_id") val hostId: String)
+
 data class UploadResponse(
     val url: String
 )
@@ -281,6 +306,41 @@ interface ApiService {
         @Query("limit") limit: Int = 200,
         @Query("updated_after") updatedAfter: Long? = null
     ): List<Experience>
+
+    @GET("me/inquiries")
+    suspend fun getInquiries(@Query("skip") skip: Int = 0, @Query("limit") limit: Int = 100): List<ConsultationInquiry>
+    @PUT("me/inquiries/{id}")
+    suspend fun updateInquiry(@Path("id") id: String, @Body value: Map<String, @JvmSuppressWildcards Any>): ConsultationInquiry
+    @GET("me/notices")
+    suspend fun getNotices(@Query("skip") skip: Int = 0, @Query("limit") limit: Int = 100): List<ConsultationNotice>
+    @GET("me/feedbacks")
+    suspend fun getConsultationFeedback(@Query("skip") skip: Int = 0, @Query("limit") limit: Int = 100): List<ConsultationFeedback>
+    @POST("me/notices/{id}/read")
+    suspend fun readNotice(@Path("id") id: String): Map<String, Boolean>
+    @GET("auth/sessions")
+    suspend fun getLoginSessions(): List<LoginSession>
+    @DELETE("auth/sessions/{id}")
+    suspend fun revokeLoginSession(@Path("id") id: String): Map<String, Boolean>
+    @GET("me/blocks")
+    suspend fun getBlockedAccounts(): List<BlockedAccount>
+    @PUT("me/blocks/{id}")
+    suspend fun blockAccount(@Path("id") id: String): Map<String, Boolean>
+    @DELETE("me/blocks/{id}")
+    suspend fun unblockAccount(@Path("id") id: String): Map<String, Boolean>
+    @POST("reports")
+    suspend fun submitReport(@Body value: Map<String, String>): Map<String, @JvmSuppressWildcards Any>
+    @GET("me/reminders")
+    suspend fun getReminders(): ReminderSettings
+    @PUT("me/reminders")
+    suspend fun updateReminders(@Body value: Map<String, Boolean>): ReminderSettings
+    @POST("auth/phone/change")
+    suspend fun changePhone(@Body value: Map<String, String>): User
+    @POST("auth/account/close")
+    suspend fun closeAccount(@Body value: Map<String, String>): Map<String, Boolean>
+    @GET("catalog/search")
+    suspend fun searchCatalog(@Query("kind") kind: String, @Query("q") q: String,
+                             @Query("city") city: String, @Query("category") category: String,
+                             @Query("skip") skip: Int = 0): List<CatalogSearchItem>
 
     @GET("experiences/{id}")
     suspend fun getExperienceById(@Path("id") id: String): Experience

@@ -2185,6 +2185,44 @@ const deferred = () => {
     assert.deepEqual(storage.get(viewedKey), { corrupt: true });
   });
   storage.delete(viewedKey); storage.delete(otherViewedKey); storage.delete(bookedKey);
+  const ConsultationPage = load('src/pages/consultation/index.tsx').default;
+  const testInquiry = { id: 'inquiry-1', title: 'Server inquiry', kind: 'service', status: 'pending',
+    user_id: readyUser.id, host_id: 'host-1', conversation_id: 'chat-1', version: 1,
+    details: { guest_count: 2, inquiry_date: '2026-12-01 10:00' } };
+  session.setSession('consultation-token', readyUser);
+  let inquiryFail = false;
+  const consultationWrites = [];
+  requestHandler = async options => {
+    if (options.method === 'PUT') {
+      consultationWrites.push(options.data);
+      return inquiryFail ? response({ detail: 'Concurrent update' }, 409) : response({ ...testInquiry, status: options.data.status });
+    }
+    if (options.url.includes('/me/inquiries')) return response([testInquiry]);
+    if (options.url.includes('/catalog/search')) return response([]);
+    return response([]);
+  };
+  const center = createRenderer(ConsultationPage);
+  center.render(); await flushCallbacks();
+  check('consultation center reads shared inquiry records', () => {
+    assert.ok(nodes(center.render()).some(node => node.props.children?.includes('Server inquiry')));
+    assert.ok(action(center.render(), '结束问询'));
+  });
+  taro.showModal = async () => ({ confirm: false });
+  action(center.render(), '结束问询').props.onClick(); await flushCallbacks();
+  check('cancelled inquiry confirmation does not submit a mutation', () => assert.equal(consultationWrites.length, 0));
+  taro.showModal = async () => ({ confirm: true });
+  inquiryFail = true;
+  action(center.render(), '结束问询').props.onClick(); await flushCallbacks();
+  check('inquiry mutations carry the shared optimistic version', () => assert.deepEqual(consultationWrites[0], { status: 'closed', version: 1 }));
+  check('failed inquiry mutation keeps the record and retry action', () => assert.ok(action(center.render(), '结束问询')));
+  const switchConfirmation = deferred();
+  taro.showModal = () => switchConfirmation.promise;
+  action(center.render(), '结束问询').props.onClick(); await flushCallbacks();
+  const writesBeforeSwitch = consultationWrites.length;
+  session.setSession('replacement-login', { ...readyUser, id: 'replacement-user' });
+  center.render(); switchConfirmation.resolve({ confirm: true }); await flushCallbacks();
+  check('account switch invalidates a pending inquiry confirmation', () => assert.equal(consultationWrites.length, writesBeforeSwitch));
+  center.unmount();
   taro.showModal = originalModal;
   routerParams = {};
   console.log(`PASS: ${checks.length} miniapp regression checks; no real API or account data used`);

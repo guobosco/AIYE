@@ -117,6 +117,8 @@ def finish_wechat_login(db: Session, identity: dict, platform: str, appid: str):
         db.add(user)
         is_new_user = True
     else:
+        if db.get(models.AccountClosure, user.id):
+            raise HTTPException(403, "Account has been closed")
         user.login_provider = "wechat"
         user.wechat_unionid = unionid or user.wechat_unionid
         user.wechat_openid = openid or user.wechat_openid
@@ -159,11 +161,17 @@ def send_phone_code(
     db: Session = Depends(core.get_db),
     current_user: Optional[models.User] = Depends(core.get_optional_current_user),
 ):
-    if payload.scene == "bind_wechat_phone" and current_user is None:
+    private_scene = payload.scene in {"bind_wechat_phone", "change_phone_old", "change_phone_new", "close_account"}
+    if private_scene and current_user is None:
         raise HTTPException(401, "Sign in before binding a phone")
+    if payload.scene in {"change_phone_old", "change_phone_new", "close_account"}:
+        if not current_user.is_phone_verified:
+            raise HTTPException(403, "Verified phone required")
+        if payload.scene in {"change_phone_old", "close_account"} and accounts.phone(payload.phone_number) != current_user.phone_number:
+            raise HTTPException(403, "Use the currently verified phone")
     return accounts.send_code(
         db, payload.phone_number, payload.scene,
-        current_user.id if payload.scene == "bind_wechat_phone" else "",
+        current_user.id if private_scene else "",
         request.client.host if request.client else "unknown",
     )
 
